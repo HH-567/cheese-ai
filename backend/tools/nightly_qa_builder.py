@@ -78,7 +78,29 @@ TOPICS: list[tuple[str, str]] = [
     ("前端", "HTML/CSS/JS、React、浏览器调试"),
     ("数据库", "SQL、SQLite、MySQL、索引"),
     ("Git", "Git 提交、分支、冲突、远程仓库"),
+    ("选课", "选课时间、抢课、退课、学分上限"),
+    ("绩点", "绩点计算、挂科、重修、成绩单"),
+    ("社团", "社团招新、活动、场地申请"),
+    ("志愿", "志愿时长、志愿活动、证明材料"),
+    ("入党", "入党申请、积极分子、党课"),
+    ("驾照", "学车、考试流程、体检"),
+    ("考公", "国考、省考、选调、报名条件"),
+    ("教资", "教师资格证报名、笔试、面试"),
+    ("出国", "交换项目、语言成绩、签证材料"),
+    ("租房", "校外租房、合同、押金、安全"),
+    ("心理咨询", "心理咨询预约、压力、失眠"),
+    ("校医院", "就诊、医保报销、转诊"),
+    ("电脑选购", "笔记本配置、专业需求、预算"),
+    ("数据恢复", "误删文件、U 盘修复、备份"),
+    ("AI 工具", "AI 助手、提示词、隐私、作业规范"),
+    ("密码", "密码管理、找回、双重验证"),
+    ("手机套餐", "流量、校园套餐、携号转网"),
 ]
+
+CAMPUS_TOPICS = {
+    "校园卡", "食堂", "宿舍", "教务", "考试", "图书馆", "校园网", "奖助", "转专业", "毕业",
+    "选课", "绩点", "社团", "志愿", "入党", "心理咨询", "校医院", "租房", "快递", "出行", "证件",
+}
 
 FOCUS = [
     "办理流程和时间地点", "常见错误和注意事项", "需要准备的材料",
@@ -207,8 +229,8 @@ def build_prompt(topic: str, detail: str, focus: str, context: str, count: int) 
     )
     rules = (
         "要求：问题要具体、像真人会问的，问题里不要加引号，不要直接拿主题词开头；"
-        "答案用一到两句话、只讲一个要点，不超过 50 字；不确定的细节不要编造；"
-        "不要重复同一句话。\n"
+        "答案用一到两句话、只讲一个要点，不超过 50 字；不确定的细节不要编造，"
+        "没有资料时不要写具体的时间、金额、楼号和人名；不要重复同一句话。\n"
         "示例：\n问：食堂晚上几点停止供餐？\n答：多数食堂 19:30 停止供餐，清真窗口会晚半小时。\n"
         "问：校园卡丢了怎么挂失？\n答：在校园卡自助机或微信校园卡里点挂失，再到卡务中心补办。"
     )
@@ -327,6 +349,7 @@ def main() -> None:
                     "keywords": [topic],
                     "variants": [],
                     "grounded": bool(context),
+                    "risk": "low" if (context or topic not in CAMPUS_TOPICS) else "high",
                     "model": MODEL,
                     "created_at": datetime.now().isoformat(timespec="seconds"),
                 }
@@ -340,7 +363,7 @@ def main() -> None:
                 log(f"+{accepted_now} [{len(records)}/{args.max_pairs}] {topic} · {focus}", LOG)
             if len(records) and len(records) % 20 == 0:
                 save_snapshot(records, snapshot_path, meta)
-            time.sleep(1.5)
+            time.sleep(0.2)
     finally:
         save_snapshot(records, snapshot_path, meta)
         minutes = (time.time() - started) / 60
