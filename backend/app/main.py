@@ -155,6 +155,7 @@ class SettingsPatch(BaseModel):
     session_summary_enabled: bool | None = None
     personal_memory_enabled: bool | None = None
     disabled_models: list[str] | None = Field(default=None, max_length=20)
+    font_scale: int | None = Field(default=None, ge=80, le=150)
 
 
 class PersonalMemoryBody(BaseModel):
@@ -281,6 +282,7 @@ def _settings(db, user_id: str) -> dict[str, Any]:
         "timezone": "Asia/Shanghai", "threshold": config.MATCH_THRESHOLD, "auto_learn": 1,
         "default_scope": "personal", "max_context_turns": 3, "pause_threshold": 3, "pause_window_days": 7,
         "session_summary_enabled": 1, "personal_memory_enabled": 0, "disabled_models": "[]",
+        "font_scale": 100,
     }
 
 

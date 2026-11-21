@@ -145,7 +145,8 @@ CREATE TABLE IF NOT EXISTS settings (
   pause_window_days INTEGER NOT NULL DEFAULT 7,
   session_summary_enabled INTEGER NOT NULL DEFAULT 1,
   personal_memory_enabled INTEGER NOT NULL DEFAULT 0,
-  disabled_models TEXT NOT NULL DEFAULT '[]'
+  disabled_models TEXT NOT NULL DEFAULT '[]',
+  font_scale INTEGER NOT NULL DEFAULT 100
 );
 CREATE TABLE IF NOT EXISTS personal_memories (
   id TEXT PRIMARY KEY,
@@ -222,6 +223,8 @@ def initialize() -> None:
                 db.execute("ALTER TABLE settings ADD COLUMN personal_memory_enabled INTEGER NOT NULL DEFAULT 0")
             if "disabled_models" not in setting_columns:
                 db.execute("ALTER TABLE settings ADD COLUMN disabled_models TEXT NOT NULL DEFAULT '[]'")
+            if "font_scale" not in setting_columns:
+                db.execute("ALTER TABLE settings ADD COLUMN font_scale INTEGER NOT NULL DEFAULT 100")
         db.commit()
         if config.DEMO_MODE:
             _seed_demo(db)

@@ -52,6 +52,10 @@ def main():
     created = owner.json("POST", "/api/sessions", {"scope": "shared"})
     session_id = created["id"]
 
+    assert owner.json("PATCH", "/api/settings", {"font_scale": 130})["font_scale"] == 130
+    assert owner.request("PATCH", "/api/settings", {"font_scale": 200})[0] == 422
+    owner.json("PATCH", "/api/settings", {"font_scale": 100})
+
     match = member.json("POST", "/api/match", {"query": "Python 3 的 if 条件遇到空列表时会判断为真还是假？原因是什么？"})
     assert match["decision"] == "reuse" and match["chosen"]["via"] == "semantic", match
     member.json("PATCH", "/api/settings", {"threshold": 0.82})

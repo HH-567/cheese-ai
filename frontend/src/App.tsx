@@ -5,7 +5,7 @@ import {
   Archive, ArrowDown, ArrowLeftRight, BookOpen, Check, ChevronRight, CircleHelp,
   Cloud, Copy, Database, FileText, Flag, Gauge, History, LoaderCircle, LockKeyhole, LogOut,
   Menu, MessageSquare, MoreHorizontal, Paperclip, Plus, RefreshCw, Search, Send, Settings2, ShieldCheck,
-  Sparkles, ThumbsDown, Wrench, X,
+  Sparkles, ThumbsDown, Type, Wrench, X,
 } from 'lucide-react';
 
 import LoginScreen, { DEMO_PASSWORD, type User } from './LoginScreen';
@@ -48,6 +48,7 @@ type Settings = {
   timezone: string; threshold: number; auto_learn: number; default_scope: string; max_context_turns: number;
   pause_threshold: number; pause_window_days: number; cloud_online: boolean; model: string; demo_mode: boolean;
   shared_member: boolean;
+  font_scale: number;
   session_summary_enabled: number; personal_memory_enabled: number;
   search_provider?: string;
   text_models?: string[]; vision_model?: string;
@@ -241,6 +242,12 @@ function App() {
     if (!session?.id || page !== 'chat') return;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [session?.messages?.length, page]);
+
+  // 字体大小：整页按账号保存的百分比缩放，退出登录或读不到设置时回到 100%。
+  useEffect(() => {
+    const scale = settings?.font_scale && settings.font_scale >= 80 ? settings.font_scale : 100;
+    document.documentElement.style.setProperty('--ui-zoom', String(scale / 100));
+  }, [settings?.font_scale]);
 
   const sessionId = session?.id;
   useEffect(() => {
@@ -712,7 +719,7 @@ function App() {
               </div>}
               <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={handleInputKey}
                 placeholder={activeImage ? '根据所选图片提问…' : activeDocument ? '根据所选文件提问…' : useKnowledge ? '根据共享资料提问…' : webSearch ? '搜索网页并引用来源…' : '发消息给柒柿AI…'}
-                rows={1} aria-label="输入问题" />
+                rows={1} aria-label="输入问题" title="拖动右下角可以调整输入框高度" />
               <input ref={uploadRef} type="file" accept={'.pdf,.docx,.txt,.md,.csv' + (settings?.vision_available ? ',.png,.jpg,.jpeg,.webp' : '')} hidden onChange={(event) => {
                 const file = event.target.files?.[0];
                 event.target.value = '';
@@ -863,6 +870,23 @@ function App() {
           <div className="page-heading"><div><span className="eyebrow">偏好与路由</span><h1>设置</h1><p>配置本地工具、学习范围与回答匹配策略。</p></div><span className={`status-pill ${settings.cloud_online ? 'is-online' : ''}`}><span />{settings.cloud_online ? `已连接 · ${settings.model}` : '云端未配置'}</span></div>
           <div className="settings-layout">
             <div className="settings-main">
+              <SettingsSection icon={<Type size={17} />} title="显示" description="字体大小按账号保存在服务端，登录后在每台设备上立即生效。">
+                <label className="setting-row setting-row--range">
+                  <span><strong>字体大小</strong><small>当前 {settings.font_scale}% · 整页一起放大，按钮和输入框也跟着变大</small></span>
+                  <input aria-label="字体大小" type="range" min="80" max="150" step="5" value={settings.font_scale}
+                    onChange={(event) => setSettings({ ...settings, font_scale: Number(event.target.value) })}
+                    onMouseUp={() => void saveSettings({ font_scale: settings.font_scale })}
+                    onTouchEnd={() => void saveSettings({ font_scale: settings.font_scale })}
+                    onKeyUp={() => void saveSettings({ font_scale: settings.font_scale })} />
+                </label>
+                <div className="setting-row">
+                  <span><strong>快速选择</strong><small>看不清时先试 115% 或 130%；130% 以上适合投影和外接屏。</small></span>
+                  <span className="font-presets">{[100, 115, 130, 145].map((value) => (
+                    <button key={value} type="button" className={settings.font_scale === value ? 'small-button small-button--accent' : 'small-button'}
+                      onClick={() => void saveSettings({ font_scale: value })}>{value}%</button>
+                  ))}</span>
+                </div>
+              </SettingsSection>
               <SettingsSection icon={<Cloud size={17} />} title="回答模型" description="自动选择会按下面的顺序使用第一个已启用的模型；停用的模型不参与自动选择，也不出现在聊天选择框里。">
                 {(settings.models ?? []).length > 0 ? (settings.models ?? []).map((model) => (
                   <label className="setting-row" key={model.id}>
