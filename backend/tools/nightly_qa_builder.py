@@ -103,7 +103,7 @@ def log(message: str, handle) -> None:
 
 def chat(messages: list[dict], *, max_tokens: int = 220, temperature: float = 0.5, timeout: int = 180) -> str:
     payload = {
-        "model": "qwen2.5-0.5b", "messages": messages, "max_tokens": max_tokens,
+        "model": MODEL, "messages": messages, "max_tokens": max_tokens,
         "temperature": temperature, "repeat_penalty": 1.25, "top_p": 0.9,
     }
     request = urllib.request.Request(
@@ -229,14 +229,15 @@ def main() -> None:
     parser.add_argument("--max-pairs", type=int, default=4000)
     parser.add_argument("--out", default=str(ROOT / "data" / "candidates"))
     parser.add_argument("--endpoint", default="http://127.0.0.1:8080/v1/chat/completions")
+    parser.add_argument("--model", default="qwen2.5-3b", help="llama-server 的 --alias")
     parser.add_argument("--no-web", action="store_true", help="不联网搜索，只靠本地模型")
     parser.add_argument("--search-ttl", type=int, default=7200, help="同一主题搜索结果复用秒数")
     parser.add_argument("--max-searches", type=int, default=90)
     parser.add_argument("--seed", type=int, default=7)
     args = parser.parse_args()
 
-    global ENDPOINT, LOG, SEARCHES, MAX_SEARCHES
-    ENDPOINT, SEARCHES, MAX_SEARCHES = args.endpoint, 0, args.max_searches
+    global ENDPOINT, LOG, SEARCHES, MAX_SEARCHES, MODEL
+    ENDPOINT, SEARCHES, MAX_SEARCHES, MODEL = args.endpoint, 0, args.max_searches, args.model
     random.seed(args.seed)
 
     out_dir = Path(args.out)
@@ -277,7 +278,7 @@ def main() -> None:
     rejected = Counter()
     calls = 0
     started = time.time()
-    meta = {"source": "nightly-local-model", "model": "qwen2.5-0.5b", "endpoint": args.endpoint}
+    meta = {"source": "nightly-local-model", "model": MODEL, "endpoint": args.endpoint}
 
     try:
         while datetime.now() < deadline and len(records) < args.max_pairs:
@@ -326,6 +327,7 @@ def main() -> None:
                     "keywords": [topic],
                     "variants": [],
                     "grounded": bool(context),
+                    "model": MODEL,
                     "created_at": datetime.now().isoformat(timespec="seconds"),
                 }
                 records.append(record)
@@ -361,7 +363,7 @@ def main() -> None:
             f"python backend/tools/import_qa_library.py --source \"{snapshot_path}\" --scope shared",
             "```",
             "",
-            "导入前建议先抽查 `qa-{0}.json` 里的答案：本地 0.5B 模型生成的细节可能有误。".format(stamp),
+            "导入前建议先抽查 `qa-{0}.json` 里的答案：本地 {1} 生成的细节可能有误。".format(stamp, MODEL),
         ]
         report_path.write_text("\n".join(report), encoding="utf-8")
         log(f"done: {len(records)} records in {minutes:.1f} min -> {snapshot_path}", LOG)
