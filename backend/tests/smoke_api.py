@@ -75,9 +75,12 @@ def main():
 
     for expected_path in ("semantic", "alias"):
         status, raw = owner.request("POST", f"/api/sessions/{session_id}/messages", {"text": "Mac 上怎么截取单个窗口的截图？"})
-        name, done = sse_events(raw)[-1]
+        events = sse_events(raw)
+        name, done = events[-1]
         assert status == 200 and name == "done" and done["group_id"] == "grp_mac_shot", (status, done)
         assert done["match_type"] == expected_path and done["cloud_calls"] == 0, done
+        # 已有答案也要逐段推给前端，不能一次性整段塞过去。
+        assert sum(1 for event, _ in events if event == "delta") > 1, events
 
     status, raw = owner.request("POST", f"/api/sessions/{session_id}/messages", {"text": "2026年11月21日是星期几？"})
     events = sse_events(raw)

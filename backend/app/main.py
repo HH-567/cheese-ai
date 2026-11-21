@@ -6,6 +6,7 @@ import json
 import re
 import time
 import uuid
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -518,6 +519,22 @@ def delete_session(session_id: str, user: dict[str, Any] = Depends(current_user)
         _require_session(db, session_id, user["id"])
         db.execute("DELETE FROM sessions WHERE id=?", (session_id,))
     return {"ok": True}
+
+
+async def _typewriter(text: str, seconds: float = 0.28) -> AsyncIterator[str]:
+    """已有答案也按打字机节奏发：从第一段起算，整段最慢 seconds 秒发完。
+
+    用绝对时间点排程，把每次发送的固定开销算进去，慢的机器上也不会拖过 0.3 秒。
+    """
+    steps = max(1, min(30, len(text)))
+    size = max(1, -(-len(text) // steps))
+    chunks = max(1, -(-len(text) // size))
+    started = time.perf_counter()
+    for step, index in enumerate(range(0, len(text), size), 1):
+        yield text[index:index + size]
+        pause = started + seconds * step / chunks - time.perf_counter()
+        if pause > 0:
+            await asyncio.sleep(pause)
 
 
 async def _queue_stream(sync_iterator):
@@ -1133,15 +1150,11 @@ async def send_message(session_id: str, body: MessageBody,
         with transaction() as db:
             message_id = _save_assistant(db, session_id, answer, meta)
             _insert_usage(db, user_id=user["id"], session_id=session_id, query=meta["query"], path=path, total_ms=total_ms)
-        # 本地工具的回答可能有整页 HTML（几十 KB），按大小放大分片，避免上万次重渲染。
-        size = 40 if len(answer) <= 8000 else 9000
-        delay = 0.008 if size == 40 else 0.02
-
+        # 已有答案也走打字机，整段最多 0.3 秒发完；长回答按段放大，避免上万次重渲染。
         async def local_events():
             yield _sse("start", {"user_message_id": user_message_id, "message_id": message_id})
-            for index in range(0, len(answer), size):
-                yield _sse("delta", {"text": answer[index:index + size]})
-                await asyncio.sleep(delay)
+            async for text in _typewriter(answer):
+                yield _sse("delta", {"text": text})
             yield _sse("done", {**meta, "message_id": message_id, "decision": "tool" if source == "tool" else "ask"})
         return StreamingResponse(local_events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
@@ -1153,9 +1166,8 @@ async def send_message(session_id: str, body: MessageBody,
             _insert_usage(db, user_id=user["id"], session_id=session_id, query=query, path=path, total_ms=total_ms)
         async def reuse_events():
             yield _sse("start", {"user_message_id": user_message_id, "message_id": message_id})
-            for index in range(0, len(answer), 40):
-                yield _sse("delta", {"text": answer[index:index + 40]})
-                await asyncio.sleep(0.006)
+            async for text in _typewriter(answer):
+                yield _sse("delta", {"text": text})
             yield _sse("done", {**meta, "message_id": message_id, "decision": "reuse"})
         return StreamingResponse(reuse_events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
