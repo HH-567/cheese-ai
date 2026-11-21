@@ -31,6 +31,8 @@ npm run dev
 
 运行 `python backend/tests/governance_acceptance.py` 可在独立数据库中验收举报、成员权限、版本和到期复核。配置方法见 [治理与授权验收](docs/governance-acceptance.md)。
 
+运行 `python backend/tests/greeting_acceptance.py` 可用本地模拟云端验收寒暄入库：`你好`、`你是谁` 会连同短等价问法写进问答库，`谢谢` 不入库，再次问候由问答库直接回答。
+
 本机可在同一登录页使用预置账号或登记新身份。注册、跨设备会话、每日云端额度和 GitHub 正式发布查询的设置方式见 [注册与使用](docs/trial.md)。
 
 聊天输入框的「网页搜索」默认使用百度。服务端配置 `BAIDU_API_KEY`（百度千帆 API Key）后，聊天可显示搜索摘要和可点击的原文引用。接口未配置或暂时不可用时，可以点击「在百度查看结果」。如果需要使用 Brave Search，可设 `QISHI_SEARCH_PROVIDER=brave` 和 `BRAVE_SEARCH_API_KEY`。摘要生成计入云端额度，搜索记录保存在会话历史。 [百度搜索 API](https://cloud.baidu.com/doc/qianfan-api/s/wmwbk70bv)
@@ -78,7 +80,7 @@ python -m app.cli create-user --id owner --name 管理员 --password "替换为�
 
 设置页的「显示」可以调字体大小（80%–150%，按账号保存在服务端，登录后在各设备生效），整页连同按钮和输入框一起缩放；聊天输入框右下角可以拖动改高度，最高约半屏。
 
-长代码块在回答输出完成后会自动收成一张小卡片（语言、行数、大小、首行预览），点「展开」看全文，点「复制代码」只复制代码本身、不带上下说明；回答下方的「复制」仍然复制整条回答。
+长代码块在回答输出完成后会自动收成一个小窗口（约 5 行，滚轮或拖动右侧滚动条可上下查看），点「展开」看全文，点「收起」回到小窗口；点「复制代码」只复制代码本身、不带上下说明。问答库和本地工具的回答都用打字机逐段输出，速度约每秒 350 字（300–400 之间），超长页面最多 4 秒打完。
 
 ## 问答样例
 
@@ -88,7 +90,7 @@ python -m app.cli create-user --id owner --name 管理员 --password "替换为�
 
 本机可在聊天框的「回答模型」中选择 Qwen2.5 0.5B。重开本地服务时，在项目目录运行 [start-local-model.ps1](start-local-model.ps1)。柒柿AI 通过 `QISHI_LOCAL_MODEL` 和 `QISHI_LOCAL_MODEL_URL` 连接本机的 Chat Completions 接口。本地推理适合短文案和简单改写，事实问答仍需核对。 [Qwen 权重](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF) · [llama.cpp 运行配置](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md)
 
-当前目录未找到单独的训练数据文件夹。`backend/data/seed_qa.json` 收录了从前端演示种子整理的样例，演示模式首次启动时将它们导入共享库。可用 `QISHI_DEMO_SEED_PATH` 指定相同结构的 JSON 文件，设为空值可跳过种子导入。开启自动学习后，同一会话中独立、稳定的新问题及其完整云端回答也会自动写入该会话选择的个人库或共享库。原问和答案保存后，后台生成等价问法。聊天里的入库状态可以直接打开问答记录，跳过时会显示原因。
+当前目录未找到单独的训练数据文件夹。`backend/data/seed_qa.json` 收录了从前端演示种子整理的样例，演示模式首次启动时将它们导入共享库。可用 `QISHI_DEMO_SEED_PATH` 指定相同结构的 JSON 文件，设为空值可跳过种子导入。开启自动学习后，同一会话中独立、稳定的新问题及其完整云端回答也会自动写入该会话选择的个人库或共享库。「你好」「你是谁」这类寒暄和自我介绍同样会入库（等价问法允许更短），「谢谢」「在吗」这类不构成问题的内容仍然跳过。原问和答案保存后，后台生成等价问法。聊天里的入库状态可以直接打开问答记录，跳过时会显示原因。
 
 点击「换个说法」会优先使用当前版本已收录的表达，也可以按需让云端改写。按需改写保存在该条聊天回答中，可恢复原回答。未入库的云端回答也可以提交反馈，反馈和答复快照可在审核页查看。
 

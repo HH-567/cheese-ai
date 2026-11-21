@@ -151,7 +151,13 @@ kbd { padding: 2px 5px; border: 1px solid var(--line-strong); border-radius: 4px
 .md-code-button { padding: 3px 8px; border: 1px solid #d9e2da; border-radius: 4px; background: #fff; color: #4c5f52; font-size: 10px; white-space: nowrap; }
 .md-code-button:hover { border-color: #b6c8ba; color: #2d5a41; }
 .md-code-button--primary { border-color: #cfe0d3; background: #f2f8f3; color: #2f6347; }
-.md-code-body { max-height: 60vh; overflow: auto; border-top: 1px solid #e5e9e5; }
+.md-code-body { overflow-y: scroll; border-top: 1px solid #e5e9e5; }
+.md-code-body::-webkit-scrollbar { width: 10px; height: 10px; }
+.md-code-body::-webkit-scrollbar-thumb { border: 3px solid #f7f9f7; border-radius: 6px; background: #b9c8bc; }
+.md-code-body::-webkit-scrollbar-thumb:hover { background: #9db2a2; }
+.md-code-body::-webkit-scrollbar-track { background: #f2f5f2; }
+.md-code-body--compact { max-height: 132px; }
+.md-code-body--full { max-height: 60vh; }
 .md-code-body pre { margin: 0; border: 0; border-radius: 0; }
 @media (max-width: 720px) { .md-code-preview { display: none; } .md-code-head { flex-wrap: wrap; } }
 .markdown-body table { width: 100%; border-collapse: collapse; font-size: 11px; }

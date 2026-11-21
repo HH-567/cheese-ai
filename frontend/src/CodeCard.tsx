@@ -55,7 +55,9 @@ export function CodeCard({ streaming, children }: { streaming: boolean; children
             onClick={() => setExpanded((value) => !value)}>{expanded ? '收起' : '展开'}</button>
         </span>
       </div>
-      {expanded && <div className="md-code-body"><pre>{children}</pre></div>}
+      <div className={`md-code-body ${expanded ? 'md-code-body--full' : 'md-code-body--compact'}`}>
+        <pre>{children}</pre>
+      </div>
     </div>
   );
 }

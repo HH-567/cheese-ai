@@ -521,18 +521,23 @@ def delete_session(session_id: str, user: dict[str, Any] = Depends(current_user)
     return {"ok": True}
 
 
-async def _typewriter(text: str, seconds: float = 0.28) -> AsyncIterator[str]:
-    """已有答案也按打字机节奏发：从第一段起算，整段最慢 seconds 秒发完。
+async def _typewriter(text: str, rate: int = 350) -> AsyncIterator[str]:
+    """按每秒约 350 字（300–400 之间）打出来。
 
-    用绝对时间点排程，把每次发送的固定开销算进去，慢的机器上也不会拖过 0.3 秒。
+    短的回答至少打 0.35 秒，不然一眼就闪过去；超长回答（整页 HTML）最多 4 秒打完，
+    否则几十 KB 的页面要打好几分钟。
     """
-    steps = max(1, min(30, len(text)))
-    size = max(1, -(-len(text) // steps))
-    chunks = max(1, -(-len(text) // size))
+    length = len(text)
+    if not length:
+        return
+    duration = min(4.0, max(0.35, length / rate))
+    chunks = max(1, min(60, round(duration / 0.04)))
+    size = max(1, -(-length // chunks))
+    chunks = -(-length // size)
     started = time.perf_counter()
-    for step, index in enumerate(range(0, len(text), size), 1):
+    for step, index in enumerate(range(0, length, size), 1):
         yield text[index:index + size]
-        pause = started + seconds * step / chunks - time.perf_counter()
+        pause = started + duration * step / chunks - time.perf_counter()
         if pause > 0:
             await asyncio.sleep(pause)
 
@@ -575,12 +580,21 @@ def _save_assistant(db, session_id: str, content: str, meta: dict[str, Any], sta
     return message_id
 
 
+_GREETING_QUERY = re.compile(
+    r"^(?:你好|您好|你们好|嗨|哈喽|你是谁(?:呀|啊)?|who\s+are\s+you|hello|hi|hey)[\s？?！!。,.~～]*$",
+    re.I,
+)
+
+
 def _learning_skip_reason(query: str, previous: list[dict[str, Any]], contextual: bool, force_cloud: bool,
                           blocked: list, auto_learn: bool) -> str | None:
     if not auto_learn:
         return "设置中已关闭自动学习"
     if force_cloud or blocked:
         return "重新生成或绕开问题记录时，仅保留聊天回答"
+    # 寒暄和自我介绍是独立问题，答案也值得存进问答库。
+    if _GREETING_QUERY.fullmatch(query.strip()):
+        return None
     if contextual or re.search(
         r"^(?:继续|再说|再详细|再解释|它们?|他们?|她们?|前者|后者|这些|这种|这么|"
         r"那(?:个|些|种|么|如果)|该(?:回答|代码|方案|方法))|上文|前文|刚才|之前提到|上[一面述]|这段|这个(?:回答|代码|方案)",
@@ -592,7 +606,7 @@ def _learning_skip_reason(query: str, previous: list[dict[str, Any]], contextual
     if re.search(r"今天|现在|当前|实时|天气|最新|汇率|几点", query):
         return "这条问题包含时效条件"
     if len(normalize(query)) < 2 or len(query) > 400 or re.fullmatch(
-        r"(?:嗨|你好|您好|谢谢|测试|在吗|你是谁|hi|hello|ok|仅回复\s*\w+)[？?！!。]*", query, re.I
+        r"(?:谢谢|测试|在吗|ok|仅回复\s*\w+)[？?！!。]*", query, re.I
     ):
         return "这条内容不适合保存为通用问答"
     discussed = any(msg["role"] == "assistant" and msg["source"] in ("cloud", "library") for msg in previous)
@@ -677,12 +691,14 @@ def _process_next_learning_task() -> bool:
     try:
         aliases, token_usage = generate_aliases(dict(task), task["answer"])
         seen = {normalize(task["original"])}
+        # 寒暄本身很短，等价问法也短，按 2 个字起算。
+        minimum = 2 if _GREETING_QUERY.fullmatch(task["original"].strip()) else 6
         for text in aliases:
             key = normalize(text)
             if not key or key in seen:
                 continue
             seen.add(key)
-            if validate_alias(text, task["original"]):
+            if validate_alias(text, task["original"], minimum):
                 continue
             accepted.append((key, text))
         if not accepted:

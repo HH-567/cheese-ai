@@ -289,8 +289,8 @@ def rewrite_answer(answer: str, style: str) -> tuple[str, dict[str, int]]:
     return text.strip(), usage
 
 
-def validate_alias(alias: str, original: str) -> str | None:
-    if len(alias) < 6 or len(alias) > 160:
+def validate_alias(alias: str, original: str, minimum: int = 6) -> str | None:
+    if len(alias) < minimum or len(alias) > 160:
         return "长度不合适"
     alias_digits = set(re.findall(r"\d+(?:\.\d+)?", alias))
     original_digits = set(re.findall(r"\d+(?:\.\d+)?", original))
