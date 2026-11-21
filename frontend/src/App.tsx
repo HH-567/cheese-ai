@@ -157,6 +157,7 @@ function App() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const autoFollow = useRef(true);
   const activeSelection = fileSelection?.sessionId === session?.id ? fileSelection : null;
   const activeFile = activeSelection && session?.[activeSelection.kind]?.find((file) => file.id === activeSelection.id);
   const activeImage = activeSelection?.kind === 'images' ? activeFile : null;
@@ -239,10 +240,25 @@ function App() {
     void loadPage(page);
   }, [loadPage, page]);
 
+  const lastContentLength = session?.messages?.[session.messages.length - 1]?.content.length ?? 0;
+  // 打字过程中关掉平滑滚动，否则频繁的 scrollTop 赋值会互相打断，追不上新字。
   useEffect(() => {
-    if (!session?.id || page !== 'chat') return;
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [session?.messages?.length, page]);
+    const node = scrollRef.current;
+    if (node) node.style.scrollBehavior = busy ? 'auto' : '';
+  }, [busy]);
+
+  useEffect(() => {
+    if (page !== 'chat') return;
+    const node = scrollRef.current;
+    if (!node || !autoFollow.current) return;
+    // 打字过程中贴住最新一个字；回答结束后再平滑补一次，让折叠后的卡片留在视野里。
+    if (busy) node.scrollTop = node.scrollHeight;
+    else node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' });
+  }, [page, session?.messages?.length, lastContentLength, busy]);
+
+  useEffect(() => {
+    autoFollow.current = true;
+  }, [session?.id]);
 
   // 字体大小：整页按账号保存的百分比缩放，退出登录或读不到设置时回到 100%。
   useEffect(() => {
@@ -432,6 +448,7 @@ function App() {
     if (!text || !session || busy || uploading) return;
     setBusy(true);
     setError('');
+    autoFollow.current = true;
     const userId = `local-user-${crypto.randomUUID()}`;
     const assistantId = `pending-${crypto.randomUUID()}`;
     setSession((current) => current ? {
@@ -665,7 +682,11 @@ function App() {
 
         {page === 'chat' && session && <div className="chat-layout">
           <section className="conversation-column">
-            <div className="conversation-scroll" ref={scrollRef}>
+            <div className="conversation-scroll" ref={scrollRef}
+              onScroll={(event) => {
+                const node = event.currentTarget;
+                autoFollow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 120;
+              }}>
               {session.messages?.length ? <div className="message-stack">
                   {session.messages.map((message) => <ChatMessage key={message.id} message={message} user={user} sessionId={session.id} busy={busy} onOpenGroup={openLearnedGroup} onCopy={() => { void navigator.clipboard.writeText(message.content); notify('已复制回答'); }} onReport={() => { setReportTarget(message); setReportCategory('mismatch'); setReportNote(''); }} onRetry={() => void send(message.meta?.query ?? '', false, undefined, Boolean(message.meta?.web_search), message.meta?.document_id, message.meta?.image_id, Boolean(message.meta?.knowledge), message.meta?.requested_model ?? '')} onReask={() => void send(message.meta?.query ?? '', true, message.meta?.reask_of ?? (message.meta?.group_id && message.meta?.version_id ? { group_id: message.meta.group_id, version_id: message.meta.version_id } : undefined), false, undefined, undefined, false, selectedModel === '@local' ? '' : selectedModel)} onVariant={async (style) => {
                   try {
