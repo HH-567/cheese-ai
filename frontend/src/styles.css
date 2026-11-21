@@ -142,6 +142,18 @@ kbd { padding: 2px 5px; border: 1px solid var(--line-strong); border-radius: 4px
 .markdown-body code { padding: 2px 4px; border-radius: 3px; background: #eff3ef; color: #86442f; font: 11px 'Roboto Mono', monospace; }
 .markdown-body pre { overflow: auto; margin: 12px 0; padding: 13px 15px; border: 1px solid #e5e9e5; border-radius: 6px; background: #f7f9f7; line-height: 1.65; }
 .markdown-body pre code { padding: 0; background: none; color: #34433a; font-size: 11px; }
+.md-code-card { margin: 12px 0; border: 1px solid #e5e9e5; border-radius: 6px; background: #f7f9f7; overflow: hidden; }
+.md-code-head { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 6px 9px; }
+.md-code-lang { flex: none; padding: 1px 6px; border-radius: 3px; background: #e9f0ea; color: #3c5a45; font: 10px 'Roboto Mono', monospace; text-transform: uppercase; }
+.md-code-meta { flex: none; color: #93a097; font-size: 10px; white-space: nowrap; }
+.md-code-preview { min-width: 0; flex: 1; overflow: hidden; color: #93a097; font: 10px 'Roboto Mono', monospace; text-overflow: ellipsis; white-space: nowrap; }
+.md-code-actions { display: flex; flex: none; gap: 6px; }
+.md-code-button { padding: 3px 8px; border: 1px solid #d9e2da; border-radius: 4px; background: #fff; color: #4c5f52; font-size: 10px; white-space: nowrap; }
+.md-code-button:hover { border-color: #b6c8ba; color: #2d5a41; }
+.md-code-button--primary { border-color: #cfe0d3; background: #f2f8f3; color: #2f6347; }
+.md-code-body { max-height: 60vh; overflow: auto; border-top: 1px solid #e5e9e5; }
+.md-code-body pre { margin: 0; border: 0; border-radius: 0; }
+@media (max-width: 720px) { .md-code-preview { display: none; } .md-code-head { flex-wrap: wrap; } }
 .markdown-body table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .markdown-body th, .markdown-body td { padding: 7px 9px; border: 1px solid #e1e7e2; text-align: left; vertical-align: top; }
 .markdown-body th { background: #f6f8f6; color: #56645b; font-weight: 600; }

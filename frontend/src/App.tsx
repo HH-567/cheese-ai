@@ -15,6 +15,7 @@ import { VoiceInput } from './VoiceInput';
 import { PersonalMemorySettings } from './PersonalMemorySettings';
 import { KnowledgeLibrary } from './KnowledgeLibrary';
 import { ReusableMethods } from './ReusableMethods';
+import { codeRenderers } from './CodeCard';
 type Trace = { key: string; label: string; state: 'ok' | 'skip' | 'fail' | 'run'; detail: string };
 type LearnTask = { group_id: string; state: 'queued' | 'running' | 'done' | 'failed'; alias_count: number; waiting_for_quota?: boolean };
 type Meta = {
@@ -945,7 +946,7 @@ function ChatMessage({ message, user, sessionId, busy, onOpenGroup, onCopy, onRe
     <div className="assistant-mark"><Sparkles size={15} /></div><div className="assistant-body">
       <div className="assistant-meta"><strong>柒柿AI</strong><span className={`source-pill source-pill--${message.source ?? 'pending'}`}><i />{sourceName(meta.knowledge && !isError ? 'knowledge' : meta.image_id && !isError ? 'image' : meta.document_id && !isError ? 'document' : meta.web_search && !isError ? 'search' : message.source)}</span>{meta.match_type && meta.source === 'library' && <span className="match-hint">{meta.match_type === 'semantic' ? '意图匹配' : meta.match_type === 'alias' ? '等价问法' : '原问命中'}</span>}</div>
       {isError ? <div className="error-answer"><CircleHelp size={16} /><span>{message.error || meta.error || '这次请求没有完成。'}</span><button onClick={onRetry} disabled={busy}><RefreshCw size={14} />重试</button></div> : <div className={`markdown-body ${message.status === 'streaming' ? 'markdown-body--streaming' : ''}`}>
-        {message.content ? (meta.personal_memory_command ? <p className="personal-memory-content">{message.content}</p> : meta.document_id || meta.knowledge ? <DocumentAnswer content={message.content} sources={meta.document_sources ?? []} name={meta.document_name} /> : meta.web_search ? <WebAnswer content={message.content} sources={meta.web_sources ?? []} /> : <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>) : message.status === 'streaming' ? <span className="typing-cursor" /> : <span className="muted-text">没有生成文字</span>}
+        {message.content ? (meta.personal_memory_command ? <p className="personal-memory-content">{message.content}</p> : meta.document_id || meta.knowledge ? <DocumentAnswer content={message.content} sources={meta.document_sources ?? []} name={meta.document_name} /> : meta.web_search ? <WebAnswer content={message.content} sources={meta.web_sources ?? []} /> : <ReactMarkdown remarkPlugins={[remarkGfm]} components={message.status === 'streaming' ? codeRenderers.streaming : codeRenderers.ready}>{message.content}</ReactMarkdown>) : message.status === 'streaming' ? <span className="typing-cursor" /> : <span className="muted-text">没有生成文字</span>}
       </div>}
       {!isError && message.status !== 'streaming' && <div className="message-actions">
         <button onClick={() => { onCopy(); setCopied(true); window.setTimeout(() => setCopied(false), 1400); }} title="复制回答">{copied ? <Check size={14} /> : <Copy size={14} />}<span>{copied ? '已复制' : '复制'}</span></button>
