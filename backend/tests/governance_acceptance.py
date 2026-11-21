@@ -239,7 +239,7 @@ def main():
                         ("u-d", "member", "QS-2048", 1), ("u-e", "member", "QS-2048", 1),
                         ("guest", "member", "QS-2048", 0), ("outside", "admin", "other", 1),
                     ):
-                        db.execute("INSERT INTO users VALUES(?,?,?,?,?,?)", (user_id, user_id, role, verified, password, now_iso()))
+                        db.execute("INSERT INTO users(id,name,role,verified,password_hash,created_at) VALUES(?,?,?,?,?,?)", (user_id, user_id, role, verified, password, now_iso()))
                         db.execute("INSERT INTO library_members VALUES(?,?,?)", (library, user_id, role))
                         db.execute("INSERT INTO settings(user_id) VALUES(?)", (user_id,))
                     private = _make_learn_group(db, "u-b", "personal", "水的化学式是什么？", "H₂O")["group_id"]

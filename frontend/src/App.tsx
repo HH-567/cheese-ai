@@ -58,6 +58,8 @@ type Settings = {
   disabled_models?: string[];
   vision_available?: boolean; speech_available?: boolean;
 };
+type MemberQuota = { id: string; name: string; role: string; daily_cloud_calls: number | null; limit: number | null; used_today: number };
+type MemberQuotaList = { default_limit: number | null; site_limit: number | null; members: MemberQuota[] };
 type Quota = { limit: number | null; used: number; site_exhausted: boolean; resets_at: string };
 type Usage = { total: number; zero_cloud: number; zero_cloud_rate: number; cloud_calls: number; answer_calls: number; learn_calls: number; summary_calls: number; cost: number; cost_configured: boolean; cost_per_100: number | null; median_total_ms: number; paths: Record<string, number>; requests: { at: string; query: string; path: string; cloud_calls: number; total_ms: number; cost: number }[]; quota: Quota };
 type Governance = {
@@ -131,6 +133,7 @@ function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [memberQuotas, setMemberQuotas] = useState<MemberQuotaList | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [governance, setGovernance] = useState<Governance | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
@@ -265,6 +268,15 @@ function App() {
     const scale = settings?.font_scale && settings.font_scale >= 80 ? settings.font_scale : 100;
     document.documentElement.style.setProperty('--ui-zoom', String(scale / 100));
   }, [settings?.font_scale]);
+
+  // 管理员打开设置页时读取成员额度；普通成员看不到这一块。
+  useEffect(() => {
+    if (page !== 'settings' || user?.role !== 'admin') {
+      setMemberQuotas(null);
+      return;
+    }
+    void api<MemberQuotaList>('/api/admin/members').then(setMemberQuotas).catch(() => setMemberQuotas(null));
+  }, [page, user?.role]);
 
   const sessionId = session?.id;
   useEffect(() => {
@@ -909,6 +921,12 @@ function App() {
                   ))}</span>
                 </div>
               </SettingsSection>
+              {user.role === 'admin' && <SettingsSection icon={<ShieldCheck size={17} />} title="成员额度" description="每人每天的云端调用上限，按账号生效；留空跟随服务端默认值，填 0 表示不限。">
+                {memberQuotas ? <>
+                  <div className="setting-row"><span><strong>默认额度</strong><small>没有单独设置的账号使用这个上限；全站额度 {memberQuotas.site_limit ? `${memberQuotas.site_limit} 次/天` : '不限'}。</small></span><span className="status-pill"><span />{memberQuotas.default_limit ? `${memberQuotas.default_limit} 次/天` : '不限'}</span></div>
+                  {memberQuotas.members.map((member) => <MemberQuotaRow key={member.id} member={member} defaultLimit={memberQuotas.default_limit} onSaved={setMemberQuotas} notify={notify} />)}
+                </> : <LoadingLine />}
+              </SettingsSection>}
               <SettingsSection icon={<Cloud size={17} />} title="回答模型" description="自动选择会按下面的顺序使用第一个已启用的模型；停用的模型不参与自动选择，也不出现在聊天选择框里。">
                 {(settings.models ?? []).length > 0 ? (settings.models ?? []).map((model) => (
                   <label className="setting-row" key={model.id}>
@@ -1030,6 +1048,39 @@ function Metric({ label, value, foot, icon }: { label: string; value: string | n
 
 function SettingsSection({ icon, title, description, children }: { icon: React.ReactNode; title: string; description: string; children: React.ReactNode }) {
   return <section className="settings-section"><div className="settings-section-head"><span>{icon}</span><div><h2>{title}</h2><p>{description}</p></div></div><div className="settings-fields">{children}</div></section>;
+}
+
+function MemberQuotaRow({ member, defaultLimit, onSaved, notify }: { member: MemberQuota; defaultLimit: number | null; onSaved: (list: MemberQuotaList) => void; notify: (text: string) => void }) {
+  const [draft, setDraft] = useState(member.daily_cloud_calls === null ? '' : String(member.daily_cloud_calls));
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    setDraft(member.daily_cloud_calls === null ? '' : String(member.daily_cloud_calls));
+  }, [member.daily_cloud_calls]);
+  const save = async (value: number | null) => {
+    setSaving(true);
+    try {
+      onSaved(await api<MemberQuotaList>(`/api/admin/members/${encodeURIComponent(member.id)}`, {
+        method: 'PATCH', body: JSON.stringify({ daily_cloud_calls: value }),
+      }));
+      notify('成员额度已保存');
+    } catch (cause) {
+      notify(cause instanceof Error ? cause.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+  const used = `${member.used_today} 次${member.limit ? ` / ${member.limit}` : '（不限）'}`;
+  return <div className="member-quota-row">
+    <span className="member-quota-who"><strong>{member.name}</strong><small>{member.role === 'admin' ? '管理员' : '成员'} · 今日 {used}</small></span>
+    <span className="member-quota-controls">
+      <input type="number" min={0} max={10000} value={draft} placeholder={defaultLimit ? `默认 ${defaultLimit}` : '默认不限'}
+        aria-label={`${member.name} 的每日云端额度`} onChange={(event) => setDraft(event.target.value)} />
+      <button className="small-button" type="button" disabled={saving}
+        onClick={() => void save(draft.trim() === '' ? null : Number(draft))}>保存</button>
+      <button className="small-button" type="button" disabled={saving} onClick={() => void save(null)}>默认</button>
+      <button className="small-button" type="button" disabled={saving} onClick={() => void save(0)}>不限</button>
+    </span>
+  </div>;
 }
 
 function LoadingLine() { return <div className="loading-line"><LoaderCircle size={16} className="spin" />正在读取…</div>; }

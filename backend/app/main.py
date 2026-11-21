@@ -167,6 +167,11 @@ class KnowledgePatch(BaseModel):
     active: bool
 
 
+class MemberQuotaBody(BaseModel):
+    # null 表示跟随全局默认；0 表示不限；正数是每人每天的上限。
+    daily_cloud_calls: int | None = Field(default=None, ge=0, le=10000)
+
+
 class MethodInputs(BaseModel):
     values: dict[str, str] = Field(max_length=4)
 
@@ -1814,6 +1819,45 @@ def usage(days: int = 30, user: dict[str, Any] = Depends(current_user)):
                 "paths": dict(__import__("collections").Counter(row["path"] for row in rows)), "requests": rows[:100]}
     finally:
         db.close()
+
+
+def _require_admin(user: dict[str, Any]) -> None:
+    if user["role"] != "admin":
+        raise HTTPException(403, "只有管理员可以管理成员额度")
+
+
+def _member_quota_view(db) -> dict[str, Any]:
+    members = []
+    for row in db.execute("SELECT id,name,role,daily_cloud_calls FROM users ORDER BY role='admin' DESC, created_at"):
+        quota = cloud_quota(db, row["id"])
+        members.append({
+            "id": row["id"], "name": row["name"], "role": row["role"],
+            "daily_cloud_calls": row["daily_cloud_calls"],
+            "limit": quota["limit"], "used_today": quota["used"],
+        })
+    return {"default_limit": config.USER_DAILY_CLOUD_CALLS or None,
+            "site_limit": config.SITE_DAILY_CLOUD_CALLS or None,
+            "members": members}
+
+
+@app.get("/api/admin/members")
+def admin_members(user: dict[str, Any] = Depends(current_user)):
+    _require_admin(user)
+    db = connect()
+    try:
+        return _member_quota_view(db)
+    finally:
+        db.close()
+
+
+@app.patch("/api/admin/members/{member_id}")
+def admin_set_quota(member_id: str, body: MemberQuotaBody, user: dict[str, Any] = Depends(current_user)):
+    _require_admin(user)
+    with transaction() as db:
+        if not db.execute("SELECT 1 FROM users WHERE id=?", (member_id,)).fetchone():
+            raise HTTPException(404, "找不到这个账号")
+        db.execute("UPDATE users SET daily_cloud_calls=? WHERE id=?", (body.daily_cloud_calls, member_id))
+        return _member_quota_view(db)
 
 
 @app.get("/api/settings")

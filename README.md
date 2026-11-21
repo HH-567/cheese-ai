@@ -33,7 +33,7 @@ npm run dev
 
 运行 `python backend/tests/greeting_acceptance.py` 可用本地模拟云端验收寒暄入库：`你好`、`你是谁` 会连同短等价问法写进问答库，`谢谢` 不入库，再次问候由问答库直接回答。
 
-本机可在同一登录页使用预置账号或登记新身份。注册、跨设备会话、每日云端额度和 GitHub 正式发布查询的设置方式见 [注册与使用](docs/trial.md)。
+本机可在同一登录页使用预置账号或登记新身份。注册、跨设备会话、每日云端额度和 GitHub 正式发布查询的设置方式见 [注册与使用](docs/trial.md)。管理员可以在设置页的「成员额度」里给每个账号单独设每日上限（留空跟随默认值，0 表示不限）。
 
 聊天输入框的「网页搜索」默认使用百度。服务端配置 `BAIDU_API_KEY`（百度千帆 API Key）后，聊天可显示搜索摘要和可点击的原文引用。接口未配置或暂时不可用时，可以点击「在百度查看结果」。如果需要使用 Brave Search，可设 `QISHI_SEARCH_PROVIDER=brave` 和 `BRAVE_SEARCH_API_KEY`。摘要生成计入云端额度，搜索记录保存在会话历史。 [百度搜索 API](https://cloud.baidu.com/doc/qianfan-api/s/wmwbk70bv)
 

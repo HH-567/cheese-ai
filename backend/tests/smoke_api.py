@@ -56,6 +56,15 @@ def main():
     assert owner.request("PATCH", "/api/settings", {"font_scale": 200})[0] == 422
     owner.json("PATCH", "/api/settings", {"font_scale": 100})
 
+    members = owner.json("GET", "/api/admin/members")
+    assert {item["id"] for item in members["members"]} >= {"u-a", "u-b", "u-c"}, members
+    updated = owner.json("PATCH", "/api/admin/members/u-b", {"daily_cloud_calls": 7})
+    assert next(item for item in updated["members"] if item["id"] == "u-b")["limit"] == 7, updated
+    assert member.json("GET", "/api/usage")["quota"]["limit"] == 7
+    assert member.request("GET", "/api/admin/members")[0] == 403, "members must not read quota admin"
+    assert owner.request("PATCH", "/api/admin/members/u-b", {"daily_cloud_calls": 20000})[0] == 422
+    owner.json("PATCH", "/api/admin/members/u-b", {"daily_cloud_calls": None})
+
     match = member.json("POST", "/api/match", {"query": "Python 3 的 if 条件遇到空列表时会判断为真还是假？原因是什么？"})
     assert match["decision"] == "reuse" and match["chosen"]["via"] == "semantic", match
     member.json("PATCH", "/api/settings", {"threshold": 0.82})

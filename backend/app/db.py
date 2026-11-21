@@ -15,7 +15,8 @@ PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'member',
-  verified INTEGER NOT NULL DEFAULT 1, password_hash TEXT NOT NULL, created_at TEXT NOT NULL
+  verified INTEGER NOT NULL DEFAULT 1, password_hash TEXT NOT NULL, created_at TEXT NOT NULL,
+  daily_cloud_calls INTEGER
 );
 CREATE TABLE IF NOT EXISTS auth_sessions (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -225,6 +226,9 @@ def initialize() -> None:
                 db.execute("ALTER TABLE settings ADD COLUMN disabled_models TEXT NOT NULL DEFAULT '[]'")
             if "font_scale" not in setting_columns:
                 db.execute("ALTER TABLE settings ADD COLUMN font_scale INTEGER NOT NULL DEFAULT 100")
+            user_columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
+            if "daily_cloud_calls" not in user_columns:
+                db.execute("ALTER TABLE users ADD COLUMN daily_cloud_calls INTEGER")
         db.commit()
         if config.DEMO_MODE:
             _seed_demo(db)

@@ -410,6 +410,12 @@ td { color: #5d6a61; }
 .settings-fields { padding-left: 36px; }
 .setting-row { display: flex; min-height: 54px; align-items: center; justify-content: space-between; gap: 18px; border-top: 1px solid #eff2ef; }
 .font-presets { display: flex; flex: none; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.member-quota-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 0; border-top: 1px solid #eff2ef; }
+.member-quota-who { min-width: 0; }
+.member-quota-who strong { display: block; color: #4b584f; font-size: 10px; font-weight: 500; }
+.member-quota-who small { display: block; margin-top: 3px; color: #939d96; font-size: 8px; }
+.member-quota-controls { display: flex; flex: none; align-items: center; gap: 6px; }
+.member-quota-controls input { width: 86px; height: 27px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: #fff; color: #45564b; font-size: 10px; }
 .setting-row > span { min-width: 0; }
 .setting-row strong, .setting-row small { display: block; }
 .setting-row strong { color: #4b584f; font-size: 10px; font-weight: 500; }
