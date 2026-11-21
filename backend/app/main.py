@@ -590,6 +590,16 @@ _GREETING_QUERY = re.compile(
     re.I,
 )
 
+# 问「我是谁」这类只对提问者本人成立的个人信息，答案不能当通用问答复用。
+_SELF_INFO_QUERY = re.compile(
+    r"我是谁|我叫(?:什么|啥)|我(?:的)?名字(?:是|叫)?(?:什么|啥)|我是什么(?:身份|角色|人)|"
+    r"我(?:多大|几岁)|我住(?:在)?哪|我(?:之前|上次|刚才|刚刚)(?:问|问过|说)了?(?:什么|啥|哪些)|"
+    r"我(?:喜欢|讨厌)(?:什么|啥)|我的(?:资料|信息|账号|账户|邮箱|身份|角色)|"
+    r"\bwho\s+am\s+i\b|\bwhat(?:'s|\s+is)\s+my\s+name\b|\bhow\s+old\s+am\s+i\b|"
+    r"\bwhere\s+am\s+i\b|\bwhat\s+do\s+you\s+know\s+about\s+me\b",
+    re.I,
+)
+
 
 def _learning_skip_reason(query: str, previous: list[dict[str, Any]], contextual: bool, force_cloud: bool,
                           blocked: list, auto_learn: bool) -> str | None:
@@ -600,6 +610,8 @@ def _learning_skip_reason(query: str, previous: list[dict[str, Any]], contextual
     # 寒暄和自我介绍是独立问题，答案也值得存进问答库。
     if _GREETING_QUERY.fullmatch(query.strip()):
         return None
+    if _SELF_INFO_QUERY.search(query):
+        return "这条问题在问提问者自己的信息"
     if contextual or re.search(
         r"^(?:继续|再说|再详细|再解释|它们?|他们?|她们?|前者|后者|这些|这种|这么|"
         r"那(?:个|些|种|么|如果)|该(?:回答|代码|方案|方法))|上文|前文|刚才|之前提到|上[一面述]|这段|这个(?:回答|代码|方案)",

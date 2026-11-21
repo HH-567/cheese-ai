@@ -116,6 +116,8 @@ def main() -> None:
                 assert done["source"] == "cloud" and done.get("learn_task"), (text, done)
             dropped = ask(session_id, THANKS)
             assert not dropped.get("learn_task"), dropped
+            personal = ask(session_id, "我是谁")
+            assert not personal.get("learn_task"), personal
 
             database = sqlite3.connect(Path(data_dir) / "test.sqlite3")
             try:
@@ -138,7 +140,7 @@ def main() -> None:
 
             reuse = ask(session_id, GREETING)
             assert reuse["source"] == "library" and reuse["cloud_calls"] == 0, reuse
-            print("Greeting acceptance passed: 你好/你是谁 learned with short aliases, 谢谢 skipped, reuse is local")
+            print("Greeting acceptance passed: 你好/你是谁 learned with short aliases, 谢谢 and 我是谁 skipped, reuse is local")
         finally:
             server.terminate()
             server.wait(timeout=10)
