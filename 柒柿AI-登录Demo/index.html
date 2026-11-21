@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>柒柿 AI · 身份核验</title>
+  <meta name="description" content="把 dsh-boot-suite 的六幕开机动画改造成登录流程：第 2 幕「身份资料确认」就是真的账号口令核验。">
+  <link rel="icon" type="image/svg+xml" href="assets/icon/favicon.svg">
+
+  <!-- 启动动画的样式（dsh-boot-suite，MIT，未改动） -->
+  <link rel="stylesheet" href="vendor/dsh-boot-suite/lib/splash.css">
+  <!-- 本项目自己的表单与主界面样式 -->
+  <link rel="stylesheet" href="assets/qishi.css">
+</head>
+
+<body>
+  <!-- 登录之后的那一页；片头播放时被盖在下面 -->
+  <div id="qishi-app" class="qa-root"></div>
+
+  <!-- 启动动画挂载点：必须和 dsh-boot-suite 的 Host 注入结构一致 -->
+  <div id="dsh-startup-root" class="dsu-root dsu-boot"></div>
+
+  <noscript>
+    <p style="padding:24px;font:14px/1.7 sans-serif">
+      这个页面需要 JavaScript：片头、核验、会话都在客户端完成。
+    </p>
+  </noscript>
+
+  <!-- ① 配置（品牌 / 演示账号 / 片头开关） -->
+  <script src="assets/qishi.config.js"></script>
+
+  <!-- ② 把配置翻译成启动动画认识的 window.__DSH_STARTUP__ -->
+  <script>
+    (function () {
+      var CFG = window.__QISHI_CFG__ || {}
+      var brand = CFG.brand || {}
+      var intro = CFG.intro || {}
+
+      /* 调试/内嵌参数（都不影响默认体验）：
+           ?nosound=1    静音跑片头（录屏、无头截图、会议室）
+           ?speed=1.6    片头倍速
+           ?skipintro=1  直接进登录卡，不播片头
+           #demo=auto    第 2 幕自动填演示账号并提交（见 qishi-gate.js） */
+      var Q = null
+      try { Q = new URLSearchParams(location.search) } catch (e) { Q = null }
+      var qs = function (k) { return Q ? Q.get(k) : null }
+      var speed = Number(qs('speed')) || Number(intro.speed) || 1
+      var muted = qs('nosound') === '1' || intro.sound === false
+      window.__QISHI_NO_SOUND__ = muted
+
+      /* 声音素材的相对基址。换目录就改这一行，不用动 vendor/ 里的运行时。 */
+      window.__QISHI_ASSET_BASE__ = './vendor/dsh-boot-suite/lib/assets'
+      /* 「重播开场」重新挂脚本时用的地址（file:// 下也能用） */
+      window.__DSH_STARTUP_SCRIPT_URL__ = './vendor/dsh-boot-suite/lib/splash.js'
+
+      window.__DSH_STARTUP__ = {
+        enabled: intro.enabled !== false,
+        mode: 'always',            /* always | session | daily */
+        theme: intro.theme || 'light',
+        speed: speed,
+
+        /* 必须为 true：第 2 幕要停在登录框上等真实核验 */
+        requireInteraction: true,
+        allowSkip: intro.allowSkip !== false,
+
+        /* 声音：界面音效 + line-1..6 真人配音 */
+        sound: !muted,
+        soundVolume: 0.5,
+        sfx: muted ? 'synth' : 'audio',
+        voice: !muted && intro.voice !== false,
+        voiceLang: 'en',
+        voiceSource: 'asset',
+        voicePack: 'f',
+        voiceRate: 0.88,
+        voicePitch: 0.85,
+        voiceVolume: 0.9,
+        voiceCue: true,
+
+        /* 身份：登录成功前是占位，成功后由 assets/ui/qishi-gate.js 回填真名 */
+        identity: 'OPERATOR',
+        identityId: '0000',
+        accessLevel: '—',
+
+        /* 品牌文案 */
+        brand1: brand.en || 'QISHI',
+        brand2: brand.line2 || 'ACCESS CONTROL',
+        brand3a: (brand.tag && brand.tag[0]) || 'ACCESS',
+        brand3b: (brand.tag && brand.tag[1]) || 'GATE',
+        orgZh: brand.zh || '柒柿 AI',
+        orgEn: brand.en || 'QISHI',
+        orgSub: (brand.en || 'QISHI') + ' ACCESS GATE',
+        welcomeBox: brand.welcomeBox || 'QISHI AI',
+        /* 终幕标识下面那行小字（原版是 DEEPSEEK · HARNESS） */
+        welcomeLabel: brand.welcomeLabel || 'Q I S H I  ·  A I',
+        /* 第 3 幕 logo 下方那行小字（原版是 D E E P S E E K） */
+        logoLabel: brand.logoLabel || 'Q I S H I',
+        footer: brand.footer || 'POWERED BY QISHI',
+
+        accent: brand.accent || '#ff7500',
+        glitchA: '#ff3b30',
+        glitchB: '#2971b8',
+        welcomeDelay: 1500,
+
+        /* 转场：三处都是默认交叉叠化 */
+        transitionIn: 'dissolve',
+        transitionJoin: 'dissolve',
+        transitionOut: 'dissolve',
+        transitionMs: 600
+      }
+    })()
+  </script>
+
+  <!-- ③ 身份核验层 + 表单 + 登录桥 -->
+  <script src="assets/auth/qishi-auth.js"></script>
+  <script src="assets/ui/qishi-sfx.js"></script>
+  <script src="assets/ui/qishi-login-form.js"></script>
+  <script src="assets/ui/qishi-gate.js"></script>
+
+  <!-- ④ 已登录 / 关掉片头 → 不再重播动画（必须在 splash.js 之前决定） -->
+  <script>
+    (function () {
+      var CFG = window.__QISHI_CFG__ || {}
+      var intro = CFG.intro || {}
+      var authed = false
+      try {
+        authed = !!(window.QishiAuth && window.QishiAuth.peekSession && window.QishiAuth.peekSession())
+      } catch (e) { authed = false }
+      var forceSkip = false
+      try { forceSkip = new URLSearchParams(location.search).get('skipintro') === '1' } catch (e) { forceSkip = false }
+      window.__DSH_STARTUP_SKIP__ = forceSkip || (intro.enabled === false) ||
+        (intro.skipWhenSignedIn !== false && authed)
+
+      /* 不播片头时，把页面上那个挂载点一起摘掉。
+         留着它的话 —— 它是一条 position:fixed; inset:0 的空层，透明但挡鼠标，
+         主界面看着正常却点不动。 */
+      if (window.__DSH_STARTUP_SKIP__) {
+        var ph = document.getElementById('dsh-startup-root')
+        if (ph && ph.parentNode) ph.parentNode.removeChild(ph)
+      }
+    })()
+  </script>
+
+  <!-- ⑤ 主界面：片头结束后决定画「控制台」还是「独立登录卡」 -->
+  <script src="assets/ui/qishi-app.js"></script>
+
+  <!-- ⑥ 启动动画运行时（dsh-boot-suite，MIT；改动处都标了 QISHI PATCH，见 vendor/dsh-boot-suite/README-PATCHES.md） -->
+  <script defer src="vendor/dsh-boot-suite/lib/splash.js"></script>
+</body>
+
+</html>

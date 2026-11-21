@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>原声 / 现用 · 配音对照</title>
+  <style>
+    :root {
+      --paper: #e5e3df;
+      --ink: #0a0a0a;
+      --muted: #7a7873;
+      --hair: rgba(10, 10, 10, 0.14);
+      --accent: #ff7500;
+      --ok: #1a7f4b;
+      --mono: "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+      --din: "Bahnschrift", "DIN Alternate", "Arial Narrow", sans-serif;
+    }
+
+    body {
+      margin: 0;
+      padding: 40px 34px 60px;
+      background: linear-gradient(168deg, #efeeea 0%, var(--paper) 46%, var(--paper) 100%);
+      color: var(--ink);
+      font: 13px/1.7 "Microsoft YaHei", "PingFang SC", sans-serif;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-family: var(--din);
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+    }
+
+    .sub {
+      margin: 0 0 30px;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: 0.18em;
+      color: var(--muted);
+    }
+
+    h2 {
+      margin: 34px 0 12px;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      font-weight: 500;
+      letter-spacing: 0.26em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .ab {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      max-width: 900px;
+    }
+
+    .card {
+      padding: 16px 18px;
+      border: 1px solid var(--hair);
+      background: rgba(255, 255, 255, 0.55);
+    }
+
+    .card.now {
+      border-color: rgba(26, 127, 75, 0.45);
+    }
+
+    .tag {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+    }
+
+    .card.now .tag {
+      color: var(--ok);
+    }
+
+    .line {
+      margin: 8px 0 12px;
+      font-family: var(--din);
+      font-size: 18px;
+      letter-spacing: 0.04em;
+    }
+
+    audio {
+      width: 100%;
+      height: 34px;
+      filter: grayscale(0.15);
+    }
+
+    .meta {
+      margin-top: 10px;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+
+    table {
+      width: 100%;
+      max-width: 900px;
+      border-collapse: collapse;
+      font-family: var(--mono);
+      font-size: 11.5px;
+    }
+
+    th {
+      padding: 0 10px 8px 0;
+      text-align: left;
+      font-weight: 400;
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--hair);
+    }
+
+    td {
+      padding: 8px 10px 8px 0;
+      border-bottom: 1px solid rgba(10, 10, 10, 0.07);
+      vertical-align: middle;
+    }
+
+    td.txt {
+      color: #3a3936;
+    }
+
+    td.snd {
+      width: 240px;
+    }
+
+    td.snd audio {
+      height: 30px;
+    }
+
+    .foot {
+      margin-top: 40px;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      max-width: 900px;
+    }
+
+    @media (max-width: 760px) {
+      .ab {
+        grid-template-columns: 1fr;
+      }
+
+      td.snd {
+        width: 150px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <h1>原声 / 现用</h1>
+  <p class="sub">ORIGINAL VOICE vs CURRENT TAKE · 全部为上游原始素材与本项目合成各一份</p>
+
+  <h2>被换掉的那一句（第 6 幕 · 终幕揭幕前）</h2>
+  <div class="ab">
+    <div class="card">
+      <div class="tag">ORIGINAL · 上游原声</div>
+      <div class="line">Welcome to DeepSeek Harness.</div>
+      <audio controls preload="metadata" src="original/line-6.mp3"></audio>
+      <div class="meta">4.30s · −23.7 dBFS · 52 KB</div>
+    </div>
+    <div class="card now">
+      <div class="tag">CURRENT · 现在片头里播的</div>
+      <div class="line">Welcome to Qishi AI.</div>
+      <audio controls preload="metadata" src="current/line-6.mp3"></audio>
+      <div class="meta">3.63s · −23.7 dBFS · 57 KB · 你给的整句（已压平）</div>
+    </div>
+  </div>
+  <p class="meta" style="max-width:900px;margin-top:12px">
+    现用这句是你给的整句录音，前半段「Welcome to」与上游原声逐样本一致（相关度 1.000），
+    名字段是新的，结尾自然收敛到静音。<strong>已按原句电平压平</strong>：整段 −2.9dB，
+    从 −20.3 落到 −23.7 dBFS、峰值 −6.3，与原句同一条水平线。
+    上两版（未压平的原电平版、以及「原声骨架 + 换名」的拼接件）留在 <code>current/_archive/</code>。
+  </p>
+
+  <h2>原始配音全套（六幕 + 两个音效）</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>幕</th>
+        <th>台词</th>
+        <th>试听</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td class="txt">Access permission required.</td>
+        <td class="snd"><audio controls preload="none" src="original/line-1.mp3"></audio></td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td class="txt">Identity verification.</td>
+        <td class="snd"><audio controls preload="none" src="original/line-2.mp3"></audio></td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td class="txt">Access request received.</td>
+        <td class="snd"><audio controls preload="none" src="original/line-3.mp3"></audio></td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td class="txt">Beginning permission read.</td>
+        <td class="snd"><audio controls preload="none" src="original/line-4.mp3"></audio></td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td class="txt">Read complete. Verification passed.</td>
+        <td class="snd"><audio controls preload="none" src="original/line-5.mp3"></audio></td>
+      </tr>
+      <tr>
+        <td>6</td>
+        <td class="txt">Welcome to DeepSeek Harness.（原句）</td>
+        <td class="snd"><audio controls preload="none" src="original/line-6.mp3"></audio></td>
+      </tr>
+      <tr>
+        <td>音效</td>
+        <td class="txt">界面点按 / 打字声</td>
+        <td class="snd"><audio controls preload="none" src="original/sfx-tick.mp3"></audio></td>
+      </tr>
+      <tr>
+        <td>音效</td>
+        <td class="txt">连续打字声</td>
+        <td class="snd"><audio controls preload="none" src="original/sfx-ticks-run.mp3"></audio></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="foot">
+    回滚：把 <code>original/line-6.mp3</code> 覆盖到
+    <code>vendor/dsh-boot-suite/lib/assets/voices/f/line-6.mp3</code> 即可，不用改代码。<br>
+    素材权利归原权利人，上游注明未授权商业用途。
+  </p>
+</body>
+
+</html>

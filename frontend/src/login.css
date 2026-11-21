@@ -1,0 +1,561 @@
+/* ============================================================================
+ * qishi.css —— 登录表单 + 访问控制台
+ * ----------------------------------------------------------------------------
+ * 两套东西：
+ *   .qishi-*  登录表单：片头里（gate）和纸面上（page）共用的同一份版式
+ *   .qa-*     登录之后的那一页 / 跳过片头时的独立登录卡
+ * 配色沿用启动动画那套「技术档案」纸面：暖白底、黑墨、发丝线、橙色只做焦点色。
+ * 不覆盖 vendor/dsh-boot-suite/lib/splash.css 的任何选择器，升级动画不受影响。
+ * ========================================================================== */
+
+/* ══ 片头里的品牌标识 ═══════════════════════════════════════════════════
+   vendor 的 .dsu-whale 只服务鲸鱼那个类名（第一幕黑底上的白标 122×122）。
+   换成柒柿的标识后由这里接管尺寸与颜色，不去动 vendor 的样式表。 */
+#dsh-startup-root .dsu-black .dsu-brand-mark {
+  display: block;
+  width: 122px;
+  height: 122px;
+  color: #fff;
+  fill: currentColor;
+  margin-bottom: 18px;
+}
+
+/* 柒柿的标识比鲸鱼"方"：同样宽度下视觉更小，所以中间那两处稍微放大一点。
+   只覆盖尺寸，不动 vendor 的其它规则。 */
+#dsh-startup-root .dsu-logo svg {
+  width: 100px;
+  height: 100px;
+}
+
+#dsh-startup-root .dsu-w3 svg {
+  width: 108px;
+  height: 108px;
+}
+
+/* 登录卡 / 控制台顶栏上的小标识 */
+.qa-mark {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  opacity: 0.92;
+}
+
+/* ══ 终幕高光：青色 → 品牌橙 ═══════════════════════════════════════════
+   vendor 里那段是「参考片的青色 halation」：文字直接染成 --dsu-glitch-b（蓝），
+   光晕还把 rgba(41,113,184) 写死在 text-shadow 里。柒柿的品牌色是橙，
+   所以在这里整块覆盖 —— 色、光晕、logo 投影一起换，不然会剩一圈蓝边。 */
+#dsh-startup-root.dsu-peak .dsu-w1,
+#dsh-startup-root.dsu-peak .dsu-w4 {
+  color: var(--dsu-accent, #ff7500);
+  text-shadow: 0 0 16px rgba(255, 117, 0, 0.55);
+}
+
+#dsh-startup-root.dsu-peak .dsu-w3 svg {
+  filter: drop-shadow(0 0 12px rgba(255, 117, 0, 0.45));
+}
+
+/* 色散那一下：青蓝副本也换成橙，冷暖反转但仍然是双色错位 */
+#dsh-startup-root .dsu-glitch[data-text]::after {
+  color: var(--dsu-accent, #ff7500);
+}
+
+/* 空着的片头挂载点 = 一条透明但挡鼠标的全屏层，永远不该存在 */
+#dsh-startup-root:empty {
+  display: none;
+}
+
+.qa-root {
+  --qa-paper: #e5e3df;
+  --qa-paper-2: #efeeea;
+  --qa-ink: #0a0a0a;
+  --qa-ink-soft: #3a3936;
+  --qa-muted: #7a7873;
+  --qa-hair: rgba(10, 10, 10, 0.14);
+  --qa-hair-soft: rgba(10, 10, 10, 0.07);
+  --qa-accent: #ff7500;
+  --qa-ok: #1a7f4b;
+  --qa-bad: #c0261b;
+  --qa-din: "Bahnschrift", "DIN Alternate", "DIN Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --qa-mono: "Cascadia Mono", "SFMono-Regular", Consolas, "DejaVu Sans Mono", monospace;
+
+  min-height: 100vh;
+  background:
+    radial-gradient(120% 80% at 78% 6%, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0) 55%),
+    linear-gradient(168deg, var(--qa-paper-2) 0%, var(--qa-paper) 46%, var(--qa-paper) 100%);
+}
+
+/* ══ 登录表单 ═══════════════════════════════════════════════════════════ */
+.qishi-form {
+  --q-ink: #0a0a0a;
+  --q-ink-soft: #3a3936;
+  --q-muted: #7a7873;
+  --q-hair: rgba(10, 10, 10, 0.16);
+  --q-accent: #ff7500;
+  --q-bad: #c0261b;
+  --q-ok: #1a7f4b;
+
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  text-align: left;
+}
+
+/* 片头里用的是 .dsu-card 的上下发丝线，这里把卡片的内边距让给表单 */
+#dsh-startup-root .qishi-form {
+  margin-top: 2px;
+}
+
+.qishi-row {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 9px 2px;
+}
+
+.qishi-row + .qishi-row {
+  border-top: 1px solid var(--q-hair, rgba(10, 10, 10, 0.16));
+}
+
+.qishi-row--reg {
+  display: none;
+}
+
+.qishi-form.is-register .qishi-row--reg {
+  display: flex;
+}
+
+.qishi-label {
+  flex: 0 0 82px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.qishi-label-zh {
+  font-size: 12.5px;
+  letter-spacing: 0.12em;
+  color: var(--dsu-muted, var(--q-muted));
+}
+
+.qishi-label-en {
+  font-family: var(--dsu-mono, var(--qa-mono, monospace));
+  font-style: normal;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: rgba(122, 120, 115, 0.62);
+}
+
+.qishi-passwrap {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.qishi-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  padding: 3px 0;
+  border: 0;
+  border-bottom: 1px solid rgba(10, 10, 10, 0.12);
+  outline: 0;
+  background: transparent;
+  color: var(--dsu-ink, var(--q-ink));
+  font-family: var(--dsu-mono, var(--qa-mono, monospace));
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  transition: border-color 160ms ease, color 160ms ease;
+}
+
+.qishi-input:hover {
+  border-bottom-color: rgba(10, 10, 10, 0.32);
+}
+
+.qishi-input:focus {
+  border-bottom-color: var(--dsu-accent, var(--q-accent));
+}
+
+.qishi-input::placeholder {
+  color: rgba(10, 10, 10, 0.26);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+}
+
+.qishi-input:disabled {
+  opacity: 0.45;
+}
+
+.qishi-eye {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid var(--q-hair, rgba(10, 10, 10, 0.16));
+  background: transparent;
+  color: var(--dsu-muted, var(--q-muted));
+  font-family: var(--dsu-mono, var(--qa-mono, monospace));
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.qishi-eye:hover {
+  color: var(--dsu-ink, var(--q-ink));
+  border-color: var(--dsu-ink, var(--q-ink));
+}
+
+/* 报错 / 提示 */
+.qishi-msg {
+  margin: 8px 2px 0;
+  min-height: 15px;
+  font-family: var(--dsu-mono, var(--qa-mono, monospace));
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--q-muted);
+  transition: color 160ms ease;
+}
+
+.qishi-msg.is-err {
+  color: var(--q-bad);
+}
+
+.qishi-msg.is-ok {
+  color: var(--q-ok);
+}
+
+.qishi-msg.is-hint {
+  color: var(--q-muted);
+}
+
+/* 记住我 / 切换登记 */
+.qishi-footrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--q-hair);
+  font-size: 11px;
+  color: var(--q-muted);
+}
+
+.qishi-remember {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  letter-spacing: 0.06em;
+}
+
+.qishi-remember input {
+  accent-color: var(--dsu-accent, var(--q-accent));
+  width: 12px;
+  height: 12px;
+}
+
+.qishi-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--q-ink-soft);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--q-hair);
+  cursor: pointer;
+}
+
+.qishi-link:hover {
+  color: var(--q-accent, #ff7500);
+  text-decoration-color: currentColor;
+}
+
+.qishi-link:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* 演示账号（点一下自动填入） */
+.qishi-demo {
+  margin-top: 8px;
+}
+
+.qishi-demo-fill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px dashed var(--q-hair);
+  background: transparent;
+  color: var(--q-muted);
+  font-family: var(--dsu-mono, var(--qa-mono, monospace));
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease;
+}
+
+.qishi-demo-fill:hover {
+  border-color: var(--q-accent, #ff7500);
+  color: var(--q-ink-soft);
+}
+
+.qishi-demo-fill code {
+  font-family: inherit;
+  color: var(--q-ink);
+  letter-spacing: 0.08em;
+}
+
+.qishi-demo-fill b {
+  margin-left: auto;
+  font-weight: 400;
+  color: var(--q-accent, #ff7500);
+  letter-spacing: 0.12em;
+}
+
+/* 提交中 / 抖动 / 完成 */
+.qishi-form.is-busy .qishi-input,
+.qishi-form.is-busy .qishi-eye {
+  opacity: 0.55;
+}
+
+@keyframes qishi-shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-3px); }
+  40%, 60% { transform: translateX(3px); }
+}
+
+.qishi-form.is-shake {
+  animation: qishi-shake 320ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.qishi-form.is-done {
+  pointer-events: none;
+}
+
+/* 片头那颗按钮的完成态 */
+#dsh-startup-root .dsu-btn.qishi-btn--done {
+  color: var(--dsu-accent);
+  border-color: var(--dsu-accent);
+  cursor: default;
+}
+
+#dsh-startup-root .dsu-btn.qishi-btn--done::before {
+  transform: translateX(-101%);
+}
+
+/* 核验通过那一行 */
+.qishi-ok {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--q-hair, rgba(10, 10, 10, 0.16));
+  font-family: var(--dsu-mono, monospace);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: #1a7f4b;
+}
+
+.qishi-ok i {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-style: normal;
+  font-size: 10px;
+}
+
+/* 纸面上的登录卡（page 版） */
+.qa-login-plate .qishi-form {
+  margin-top: 18px;
+}
+
+.qa-login-plate .qishi-row {
+  padding: 11px 0;
+}
+
+.qa-login-plate .qishi-label {
+  flex-basis: 96px;
+}
+
+.qa-login-plate .qishi-input {
+  font-size: 15px;
+}
+
+.qishi-submit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  margin-top: 18px;
+  padding: 13px 18px;
+  border: 1px solid var(--qa-ink, #0a0a0a);
+  background: #0a0a0a;
+  color: #fff;
+  font-family: var(--qa-din, sans-serif);
+  font-size: 15px;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+  transition: background 200ms ease, color 200ms ease;
+}
+
+.qishi-submit:hover {
+  background: #ff7500;
+  border-color: #ff7500;
+  color: #0a0a0a;
+}
+
+.qishi-submit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.qishi-submit-en {
+  font-family: var(--qa-mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  opacity: 0.7;
+}
+
+/* ══ 独立登录页 ═════════════════════════════════════════════════════════ */
+.qa-root--login {
+  display: grid;
+  place-items: center;
+  padding: 48px 24px;
+}
+
+.qa-login {
+  width: min(468px, 100%);
+}
+
+.qa-login-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--qa-hair);
+  margin-bottom: 22px;
+}
+
+.qa-brand-mark {
+  font-family: var(--qa-din);
+  font-size: 24px;
+  letter-spacing: 0.26em;
+  color: var(--qa-ink);
+}
+
+.qa-brand-sub {
+  font-family: var(--qa-mono);
+  font-size: 10px;
+  letter-spacing: 0.26em;
+  color: var(--qa-muted);
+}
+
+.qa-login-plate {
+  padding: 26px 26px 22px;
+  border: 1px solid var(--qa-hair);
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.qa-eyebrow {
+  margin: 0 0 10px;
+  font-family: var(--qa-mono);
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: var(--qa-accent);
+}
+
+.qa-login-head h1 {
+  margin: 0 0 8px;
+  font-family: var(--qa-din);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.qa-login-head p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--qa-ink-soft);
+}
+
+.qa-notice {
+  margin: 14px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--qa-accent);
+  background: rgba(255, 117, 0, 0.07);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--qa-ink-soft);
+}
+
+.qa-login-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--qa-hair-soft);
+  font-family: var(--qa-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--qa-muted);
+}
+
+.login-loading { min-height: 100dvh; background: #0b0b0d; }
+.qishi-start-controls {
+  position: absolute;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  color: #fff;
+}
+.qishi-start-controls button {
+  border: 1px solid transparent;
+  padding: 9px 16px;
+  background: transparent;
+  color: inherit;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+.qishi-start-controls .qishi-start-play { border-color: #a69b92; }
+.qishi-start-controls .qishi-start-skip { color: #ccc5bf; }
+.qishi-start-controls button:focus-visible { outline: 2px solid #ff7500; outline-offset: 4px; }
+.qa-root--login { min-height: 100dvh; }
+.qa-login-brand .qa-mark { width: 26px; height: 26px; }
+.login-hidden-submit { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); }
+#dsh-startup-root .login-gate-card { width: min(440px, calc(100vw - 40px)); min-width: 0; padding: 10px 2px 12px; }
+.qishi-msg.is-err { animation: qishi-shake 320ms ease both; }
+
+@media (max-width: 480px) {
+  .qa-root--login { padding: 24px 16px; }
+  .qa-login-plate { padding: 22px 16px; }
+  .qa-login-brand { gap: 10px; }
+  .qa-brand-mark { font-size: 21px; }
+  .qa-brand-sub { letter-spacing: 0.17em; }
+  .qa-login-plate .qishi-label { flex-basis: 73px; }
+  .qishi-row { gap: 10px; }
+  .qishi-label-en { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qishi-form *, .qishi-form *::before, .qishi-form *::after { animation: none !important; transition: none !important; }
+}
+

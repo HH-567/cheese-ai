@@ -1,0 +1,51 @@
+[
+  {
+    "id": "grp_bool_empty",
+    "scope": "shared",
+    "original": "Python 3 的 bool([]) 返回什么？为什么？",
+    "intent": "解释 Python 空列表的布尔值及条件判断",
+    "entities": ["Python 3", "bool", "列表"],
+    "constraints": ["空列表", "中文解释"],
+    "answer": "`bool([])` 返回 **False**。Python 把空容器视为假值，因此 `if []:` 不会进入真分支。列表只要有元素就为真，即使元素本身是 `0`：`bool([0])` 返回 `True`。",
+    "aliases": [
+      "在 Python 3 中，bool([]) 的结果和原因是什么？",
+      "Python 的 if 条件遇到空列表时会判断为真还是假？",
+      "空列表在 Python 里能作为 True 吗？",
+      "为什么 if not items 可以检查列表是否为空？"
+    ]
+  },
+  {
+    "id": "grp_excel_merge",
+    "scope": "shared",
+    "original": "Excel 怎么把两列文字合并成一列？",
+    "intent": "把 Excel 两列文本连接成一列",
+    "entities": ["Excel", "单元格", "列"],
+    "constraints": ["公式输出文本"],
+    "answer": "可以用连接符：`=A2 & B2`；需要空格分隔时用 `=A2 & \" \" & B2`。新版 Excel 也可以用 `=TEXTJOIN(\"-\", TRUE, A2:B2)`。如果之后要删除源列，先复制结果并选择性粘贴为数值。",
+    "aliases": ["Excel 两列内容怎么拼到一列里？", "怎么把 A 列和 B 列的文字连起来？", "单元格文字合并用什么公式？"],
+    "variants": [
+      { "style": "brief", "text": "用 `=A2 & B2` 直接拼，需要空格就写 `=A2 & \" \" & B2`；新版也可用 `=TEXTJOIN(\"-\", TRUE, A2:B2)`。" },
+      { "style": "example", "text": "```excel\n=A2 & B2\n=A2 & \" \" & B2\n=TEXTJOIN(\"-\", TRUE, A2:B2)\n```\nA2 是「张」、B2 是「三」时，第二种写法会得到「张 三」。" }
+    ]
+  },
+  {
+    "id": "grp_mac_shot",
+    "scope": "shared",
+    "original": "Mac 怎么只截一个窗口？",
+    "intent": "在 macOS 中截取单个窗口",
+    "entities": ["Mac", "macOS", "截图", "窗口"],
+    "constraints": ["截取单个应用窗口"],
+    "answer": "按 **Shift + Command + 4**，再按一下空格键，光标会变成相机图标；将鼠标移到目标窗口上并点一下，就能只截这个窗口。按住 Control 可将截图复制到剪贴板。",
+    "aliases": ["Mac 截屏怎么只截窗口部分？", "苹果电脑如何截图一个窗口？"]
+  },
+  {
+    "id": "grp_react_hooks",
+    "scope": "shared",
+    "original": "useMemo 和 useEffect 怎么区分？",
+    "intent": "解释 React useMemo 与 useEffect 的用途差异",
+    "entities": ["React", "useMemo", "useEffect"],
+    "constraints": ["React Hooks"],
+    "answer": "`useMemo` 在渲染期间缓存一个计算结果，适合避免昂贵的重复计算；`useEffect` 在渲染提交后运行，用来和外部系统同步，例如请求、订阅或操作 DOM。简单记：`useMemo` 算值，`useEffect` 做副作用。",
+    "aliases": ["React 里 useMemo 是做什么的？", "useEffect 和 useMemo 有什么不同？"]
+  }
+]
