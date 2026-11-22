@@ -262,10 +262,10 @@ def _gram_set(text: str) -> set[str]:
 
 def _load_index(db, user_id: str, expired: bool) -> dict[str, Any]:
     signature = db.execute(
-        "SELECT (SELECT COUNT(*) FROM groups) AS groups, (SELECT COUNT(*) FROM aliases) AS aliases,"
-        " (SELECT COUNT(*) FROM library_members) AS members, (SELECT MAX(updated_at) FROM groups) AS updated"
+        "SELECT (SELECT COUNT(*) FROM groups) AS groups, (SELECT COUNT(*) FROM library_members) AS members,"
+        " (SELECT MAX(updated_at) FROM groups) AS updated"
     ).fetchone()
-    stamp = (signature["groups"], signature["aliases"], signature["members"], signature["updated"] or "")
+    stamp = (signature["groups"], signature["members"], signature["updated"] or "")
     key = (user_id, expired)
     cached = _INDEX_CACHE.get(key)
     now = time.monotonic()
