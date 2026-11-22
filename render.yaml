@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: cheese-ai-demo
+    runtime: python
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: python deploy/bootstrap.py && python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: QISHI_DEMO_MODE
+        value: "1"
+      - key: QISHI_OPEN_REGISTRATION
+        value: "0"
+      - key: QISHI_USER_DAILY_CLOUD_CALLS
+        value: "10"
+      - key: CLOUD_BASE_URL
+        sync: false
+      - key: CLOUD_MODEL
+        sync: false
+      - key: CLOUD_API_KEY
+        sync: false
