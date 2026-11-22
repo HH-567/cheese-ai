@@ -50,6 +50,7 @@ type Settings = {
   pause_threshold: number; pause_window_days: number; cloud_online: boolean; model: string; demo_mode: boolean;
   shared_member: boolean;
   font_scale: number;
+  auto_alias: number;
   session_summary_enabled: number; personal_memory_enabled: number;
   search_provider?: string;
   text_models?: string[]; vision_model?: string;
@@ -943,6 +944,7 @@ function App() {
               <SettingsSection icon={<BookOpen size={17} />} title="问答学习" description="选择回答后是否创建个人或共享问答。">
                 <label className="setting-row"><span><strong>新会话默认范围</strong><small>共享会话的合格问答会进入柒柿共享库。</small></span><select value={settings.default_scope} onChange={(event) => void saveSettings({ default_scope: event.target.value })}><option value="personal">个人库</option>{settings.shared_member && <option value="shared">共享库</option>}</select></label>
                 <label className="setting-row"><span><strong>自动学习</strong><small>独立、稳定的问答完成后自动入库，后台生成等价问法。</small></span><input className="toggle" type="checkbox" checked={Boolean(settings.auto_learn)} onChange={(event) => void saveSettings({ auto_learn: event.target.checked ? 1 : 0 } as Partial<Settings>)} /></label>
+                <label className="setting-row"><span><strong>自动生成等价问法</strong><small>入库后由后台再调一次模型，生成 3 条口语化问法；关掉可以省云端调用。</small></span><input className="toggle" type="checkbox" checked={Boolean(settings.auto_alias ?? 1)} onChange={(event) => void saveSettings({ auto_alias: event.target.checked ? 1 : 0 } as Partial<Settings>)} /></label>
               </SettingsSection>
               <SettingsSection icon={<Search size={17} />} title="匹配与记忆" description="提高阈值会减少误复用，但更多问题会交给云端。">
                 <label className="setting-row setting-row--range"><span><strong>意图匹配门槛</strong><small>当前 {settings.threshold.toFixed(2)}</small></span><input type="range" min="0.5" max="0.95" step="0.01" value={settings.threshold} onChange={(event) => setSettings({ ...settings, threshold: Number(event.target.value) })} onMouseUp={() => void saveSettings({ threshold: settings.threshold })} onTouchEnd={() => void saveSettings({ threshold: settings.threshold })} /></label>

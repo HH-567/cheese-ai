@@ -147,7 +147,8 @@ CREATE TABLE IF NOT EXISTS settings (
   session_summary_enabled INTEGER NOT NULL DEFAULT 1,
   personal_memory_enabled INTEGER NOT NULL DEFAULT 0,
   disabled_models TEXT NOT NULL DEFAULT '[]',
-  font_scale INTEGER NOT NULL DEFAULT 100
+  font_scale INTEGER NOT NULL DEFAULT 100,
+  auto_alias INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS personal_memories (
   id TEXT PRIMARY KEY,
@@ -226,6 +227,8 @@ def initialize() -> None:
                 db.execute("ALTER TABLE settings ADD COLUMN disabled_models TEXT NOT NULL DEFAULT '[]'")
             if "font_scale" not in setting_columns:
                 db.execute("ALTER TABLE settings ADD COLUMN font_scale INTEGER NOT NULL DEFAULT 100")
+            if "auto_alias" not in setting_columns:
+                db.execute("ALTER TABLE settings ADD COLUMN auto_alias INTEGER NOT NULL DEFAULT 1")
             user_columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
             if "daily_cloud_calls" not in user_columns:
                 db.execute("ALTER TABLE users ADD COLUMN daily_cloud_calls INTEGER")

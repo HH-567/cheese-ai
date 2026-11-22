@@ -18,7 +18,9 @@ import argparse
 import json
 import re
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -34,9 +36,11 @@ from app.db import connect, now_iso  # noqa: E402
 from app.engine import complete_cloud, estimated_cost, uid  # noqa: E402
 from app.matcher import normalize  # noqa: E402
 
+STATE_LOCK = threading.Lock()
+
 PROMPT = (
-    "你是中国农业大学的校园助手。为下列每条校园问答各生成 3 条学生可能自然说出的中文问法。\n"
-    "要求：口语化，每条 4 到 25 个字；必须是学生真会打的问句，能独立看懂；"
+    "你是大学校园与日常通用助手。为下列每条问答各生成 3 条用户可能自然说出的中文问法。\n"
+    "要求：口语化，每条 4 到 25 个字；必须是用户真会打的问句，能独立看懂；"
     "保持原问题的对象和范围，不要改变专业、地点、数字或时间条件；"
     "不要照抄原题，不要编号，不要英文，不要加解释。\n"
     "只返回一个 JSON 对象，格式为 {\"items\":[{\"id\":\"编号\",\"questions\":[\"问法1\",\"问法2\",\"问法3\"]}]}。\n"
@@ -63,7 +67,7 @@ def load_targets(db, prefix: str, limit: int, skip_generated: bool) -> list[dict
     return targets
 
 
-def ask_batch(batch: list[dict[str, Any]]) -> tuple[dict[str, list[str]], dict[str, int]]:
+def ask_batch(batch: list[dict[str, Any]], model: str | None = None) -> tuple[dict[str, list[str]], dict[str, int]]:
     payload = [{
         "id": item["id"],
         "title": item["original"],
@@ -73,7 +77,7 @@ def ask_batch(batch: list[dict[str, Any]]) -> tuple[dict[str, list[str]], dict[s
     } for item in batch]
     prompt = PROMPT + json.dumps(payload, ensure_ascii=False)
     # 该模型会先输出推理内容，批次大时容易撞上输出上限，这里放宽到 8192。
-    text, usage = complete_cloud([{"role": "user", "content": prompt}], max_tokens=8192)
+    text, usage = complete_cloud([{"role": "user", "content": prompt}], max_tokens=8192, model=model)
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end <= start:
         return {}, usage
@@ -92,20 +96,22 @@ def ask_batch(batch: list[dict[str, Any]]) -> tuple[dict[str, list[str]], dict[s
     return result, usage
 
 
-def ask_with_split(batch: list[dict[str, Any]], state: dict[str, Any]) -> dict[str, list[str]]:
+def ask_with_split(batch: list[dict[str, Any]], state: dict[str, Any], model: str | None = None) -> dict[str, list[str]]:
     """一次调用失败时把批次对半拆开重试，避免一条坏数据拖垮整批。"""
     try:
-        generated, usage = ask_batch(batch)
-        state["calls"] += 1
-        state["cost"] += estimated_cost(usage.get("tokens_in", 0), usage.get("tokens_out", 0))
+        generated, usage = ask_batch(batch, model)
+        with STATE_LOCK:
+            state["calls"] += 1
+            state["cost"] += estimated_cost(usage.get("tokens_in", 0), usage.get("tokens_out", 0))
         return generated
     except Exception as error:
         if len(batch) <= 1:
-            state["failed"] += 1
+            with STATE_LOCK:
+                state["failed"] += 1
             print(f"  单条失败（{batch[0]['id']}）：{error}")
             return {}
         middle = len(batch) // 2
-        return {**ask_with_split(batch[:middle], state), **ask_with_split(batch[middle:], state)}
+        return {**ask_with_split(batch[:middle], state, model), **ask_with_split(batch[middle:], state, model)}
 
 
 def acceptable(question: str) -> bool:
@@ -126,6 +132,8 @@ def main() -> int:
     parser.add_argument("--db", default=None)
     parser.add_argument("--dry-run", action="store_true", help="只生成并打印，不写库")
     parser.add_argument("--include-generated", action="store_true", help="已有等价问法的问答组也重新生成")
+    parser.add_argument("--workers", type=int, default=1, help="并发批次数，默认 1（串行）")
+    parser.add_argument("--model", default=None, help="指定云端模型，默认用 CLOUD_MODEL")
     args = parser.parse_args()
 
     if args.db:
@@ -151,49 +159,58 @@ def main() -> int:
     finally:
         db.close()
 
-    print(f"目标问答组 {len(targets)} 个，每批 {args.batch} 条")
+    print(f"目标问答组 {len(targets)} 个，每批 {args.batch} 条，并发 {args.workers}")
     started = time.perf_counter()
     added = skipped = 0
     state: dict[str, Any] = {"calls": 0, "cost": 0.0, "failed": 0}
     batch_size = max(1, args.batch)
-    for offset in range(0, len(targets), batch_size):
-        batch = targets[offset:offset + batch_size]
+    batches = [targets[offset:offset + batch_size] for offset in range(0, len(targets), batch_size)]
+    for batch in batches:
         for item in batch:
             item["keywords"] = keywords.get(item["id"], [])
-        generated = ask_with_split(batch, state)
-        rows: list[tuple[str, str, str, str]] = []
-        for item in batch:
-            group_id = item["id"]
-            question_key = normalize(item["original"])
-            for question in generated.get(group_id, []):
-                key = normalize(question)
-                if len(key) < 3 or key == question_key or not acceptable(question):
-                    skipped += 1
-                    continue
-                if key in taken:
-                    skipped += 1
-                    continue
-                taken[key] = group_id
-                rows.append((uid("alias"), group_id, question, key))
-        if args.dry_run:
-            for question in rows[:3]:
-                print(f"  {question[1]} ← {question[2]}")
-        elif rows:
-            db = connect()
-            try:
-                with db:
-                    for row in rows:
-                        db.execute(
-                            """INSERT OR IGNORE INTO aliases(id,group_id,text,text_key,status,source,created_at)
-                               VALUES(?,?,?,?, 'active', 'generated', ?)""",
-                            (*row, now_iso()),
-                        )
-            finally:
-                db.close()
-        added += len(rows)
-        done = min(offset + batch_size, len(targets))
-        print(f"  进度 {done}/{len(targets)}：本批新增 {len(rows)} 条，累计 {added} 条，"
-              f"跳过 {skipped}，调用 {state['calls']} 次")
+
+    writer = None if args.dry_run else connect()
+
+    def run(batch: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
+        return batch, ask_with_split(batch, state, args.model)
+
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
+            futures = [pool.submit(run, batch) for batch in batches]
+            for done_count, future in enumerate(as_completed(futures), 1):
+                batch, generated = future.result()
+                rows: list[tuple[str, str, str, str]] = []
+                for item in batch:
+                    group_id = item["id"]
+                    question_key = normalize(item["original"])
+                    for question in generated.get(group_id, []):
+                        key = normalize(question)
+                        if len(key) < 3 or key == question_key or not acceptable(question):
+                            skipped += 1
+                            continue
+                        if key in taken:
+                            skipped += 1
+                            continue
+                        taken[key] = group_id
+                        rows.append((uid("alias"), group_id, question, key))
+                if args.dry_run:
+                    for question in rows[:3]:
+                        print(f"  {question[1]} ← {question[2]}")
+                elif rows and writer is not None:
+                    with writer:
+                        for row in rows:
+                            writer.execute(
+                                """INSERT OR IGNORE INTO aliases(id,group_id,text,text_key,status,source,created_at)
+                                   VALUES(?,?,?,?, 'active', 'generated', ?)""",
+                                (*row, now_iso()),
+                            )
+                added += len(rows)
+                if done_count % 5 == 0 or done_count == len(futures):
+                    print(f"  进度 {min(done_count * batch_size, len(targets))}/{len(targets)}："
+                          f"累计 {added} 条，跳过 {skipped}，调用 {state['calls']} 次，失败 {state['failed']}")
+    finally:
+        if writer is not None:
+            writer.close()
 
     elapsed = time.perf_counter() - started
     print(f"完成：新增等价问法 {added} 条，模型调用 {state['calls']} 次，失败 {state['failed']} 条，"

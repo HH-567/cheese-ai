@@ -140,7 +140,26 @@ def main() -> None:
 
             reuse = ask(session_id, GREETING)
             assert reuse["source"] == "library" and reuse["cloud_calls"] == 0, reuse
-            print("Greeting acceptance passed: 你好/你是谁 learned with short aliases, 谢谢 and 我是谁 skipped, reuse is local")
+
+            # 关掉自动生成等价问法：新问答照样入库，但不再排队生成问法。
+            call("PATCH", "/api/settings", {"auto_alias": False})
+            plain_session = json.loads(call("POST", "/api/sessions", {"scope": "personal"}))["id"]
+            plain = ask(plain_session, "图书馆怎么借书？")
+            assert plain.get("source") == "cloud" and not plain.get("learn_task"), plain
+            database = sqlite3.connect(Path(data_dir) / "test.sqlite3")
+            try:
+                stored = database.execute(
+                    "SELECT count(*) FROM groups WHERE original='图书馆怎么借书？'").fetchone()[0]
+                queued = database.execute(
+                    "SELECT count(*) FROM learn_tasks t JOIN groups g ON g.id=t.group_id "
+                    "WHERE g.original='图书馆怎么借书？'").fetchone()[0]
+            finally:
+                database.close()
+            assert stored == 1 and queued == 0, (stored, queued)
+            call("PATCH", "/api/settings", {"auto_alias": True})
+
+            print("Greeting acceptance passed: 你好/你是谁 learned with short aliases, 谢谢 and 我是谁 skipped, "
+                  "auto_alias off still stores groups without alias tasks")
         finally:
             server.terminate()
             server.wait(timeout=10)

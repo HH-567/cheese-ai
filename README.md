@@ -94,6 +94,8 @@ python -m app.cli create-user --id owner --name 管理员 --password "替换为�
 
 点击「换个说法」会优先使用当前版本已收录的表达，也可以按需让云端改写。按需改写保存在该条聊天回答中，可恢复原回答。未入库的云端回答也可以提交反馈，反馈和答复快照可在审核页查看。
 
+设置里的「自动生成等价问法」控制入库后要不要再调一次模型补问法：关掉后问答照样入库，但不再排学习任务，可以省云端调用。批量导入的问答组可以用 `backend/tools/generate_aliases.py --prefix ... --workers 12` 并行补问法。
+
 ## 导入外部问答库
 
 外部题库 JSON（`{"meta": …, "qa": [{id, category, intent, question, answer, keywords, variants}]}`）可以用脚本批量入库。问题成为原问，`variants` 成为等价问法，`keywords` 成为问答组标签，分类和意图写进意图字段，问答库页面可以直接按分类关键词搜索。同一问法只能属于一个问答组，重复问法和已存在条目会被跳过，脚本可以重复运行。

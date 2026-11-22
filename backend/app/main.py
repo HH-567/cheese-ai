@@ -151,6 +151,7 @@ class SettingsPatch(BaseModel):
     timezone: str | None = None
     threshold: float | None = Field(default=None, ge=0.4, le=0.98)
     auto_learn: bool | None = None
+    auto_alias: bool | None = None
     default_scope: str | None = None
     max_context_turns: int | None = Field(default=None, ge=1, le=10)
     session_summary_enabled: bool | None = None
@@ -288,7 +289,7 @@ def _settings(db, user_id: str) -> dict[str, Any]:
         "timezone": "Asia/Shanghai", "threshold": config.MATCH_THRESHOLD, "auto_learn": 1,
         "default_scope": "personal", "max_context_turns": 3, "pause_threshold": 3, "pause_window_days": 7,
         "session_summary_enabled": 1, "personal_memory_enabled": 0, "disabled_models": "[]",
-        "font_scale": 100,
+        "font_scale": 100, "auto_alias": 1,
     }
 
 
@@ -667,8 +668,11 @@ def _make_learn_group(db, user_id: str, scope: str, query: str, answer: str, *, 
                (version_id, group_id, 1, answer, f"云端生成 · {model or config.CLOUD_MODEL}", user_id, timestamp))
     db.execute("INSERT INTO aliases(id,group_id,text,text_key,source,created_at) VALUES(?,?,?,?,?,?)",
                (uid("alias"), group_id, query, key, "original", timestamp))
-    db.execute("INSERT INTO learn_tasks(id,group_id,state,created_at) VALUES(?,?,?,?)", (uid("learn"), group_id, "queued", timestamp))
-    return {"group_id": group_id, "version_id": version_id, "group_scope": scope, "group_owner_id": user_id}
+    queued = bool(_settings(db, user_id)["auto_alias"])
+    if queued:
+        db.execute("INSERT INTO learn_tasks(id,group_id,state,created_at) VALUES(?,?,?,?)", (uid("learn"), group_id, "queued", timestamp))
+    return {"group_id": group_id, "version_id": version_id, "group_scope": scope,
+            "group_owner_id": user_id, "learn_queued": queued}
 
 
 async def _run_learning_worker() -> None:
@@ -1390,9 +1394,14 @@ async def send_message(session_id: str, body: MessageBody,
             else:
                 record = _make_learn_group(db, user["id"], session["scope"], query, answer_text, model=model_name)
                 if record:
+                    queued = record.pop("learn_queued", True)
                     meta.update(record)
-                    meta["learn_task"] = {"group_id": record["group_id"], "state": "queued", "alias_count": 0}
-                    trace.append({"key": "learn", "label": "后台学习", "state": "run", "detail": "已入库，正在生成等价问法"})
+                    if queued:
+                        meta["learn_task"] = {"group_id": record["group_id"], "state": "queued", "alias_count": 0}
+                        trace.append({"key": "learn", "label": "后台学习", "state": "run", "detail": "已入库，正在生成等价问法"})
+                    else:
+                        trace.append({"key": "learn", "label": "后台学习", "state": "skip",
+                                      "detail": "已入库，未开启自动生成等价问法"})
                 else:
                     trace.append({"key": "learn", "label": "后台学习", "state": "skip", "detail": "同一问法已入库"})
             message_id = _save_assistant(db, session_id, answer_text, meta)

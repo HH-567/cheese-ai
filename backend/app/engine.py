@@ -222,8 +222,9 @@ def stream_cloud(messages: list[dict[str, Any]], usage: dict[str, int], *, model
         raise RuntimeError(f"{label}连接在回答完成前断开，请重试")
 
 
-def complete_cloud(messages: list[dict[str, str]], *, max_tokens: int | None = None) -> tuple[str, dict[str, int]]:
-    body = {"model": config.CLOUD_MODEL, "messages": messages, "stream": False}
+def complete_cloud(messages: list[dict[str, str]], *, max_tokens: int | None = None,
+                   model: str | None = None) -> tuple[str, dict[str, int]]:
+    body = {"model": model or config.CLOUD_MODEL, "messages": messages, "stream": False}
     limit = max_tokens or config.CLOUD_MAX_TOKENS
     if limit:
         body["max_tokens"] = limit
