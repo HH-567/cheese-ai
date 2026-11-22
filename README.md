@@ -1,6 +1,6 @@
 # 柒柿AI · Cheese AI
 
-> 本地优先的问答资产层：先查问答库，未命中再请大模型；云端回答自动入库、生成等价问法，审核后服务更多人——**问过一次，全校复用**。
+> 本地优先的问答资产层：先查问答库，未命中再请大模型；云端回答自动入库、生成等价问法，审核后服务更多人——**问过一次，所有用户复用**。
 
 ![开场动画](docs/screenshots/01-intro.webp)
 
@@ -60,6 +60,9 @@ flowchart TD
 
 需要 Python 3.11+、Node.js 20+。
 
+**Windows 可以直接双击 `启动柒柿AI.cmd`**：自动创建 `.venv`、安装依赖、启动服务并打开浏览器。
+只想看离线演示，双击 `启动离线Demo.cmd` 即可。
+
 ```powershell
 python -m pip install -r backend/requirements.txt
 Copy-Item .env.example .env      # 填 CLOUD_BASE_URL / CLOUD_API_KEY / CLOUD_MODEL
@@ -80,25 +83,25 @@ python -m uvicorn app.main:app --app-dir backend --env-file .env --host 127.0.0.
 
 `.env` 里主要几项：
 
-| 变量 | 说明 |
-| --- | --- |
-| `CLOUD_BASE_URL` / `CLOUD_API_KEY` / `CLOUD_MODEL` | 云端模型（任意 OpenAI 兼容服务） |
-| `CLOUD_EXTRA_MODELS` | 同一地址下的额外模型，逗号分隔 |
-| `QISHI_DEMO_MODE` | 演示模式，预置 A/B/C 账号 |
-| `QISHI_USER_DAILY_CLOUD_CALLS` / `QISHI_SITE_DAILY_CLOUD_CALLS` | 每日额度，0 表示不限 |
-| `BAIDU_API_KEY` | 百度搜索（可选） |
-| `QISHI_LOCAL_MODEL` / `QISHI_LOCAL_MODEL_URL` | 本机 llama.cpp 模型（可选，回环地址） |
+| 变量                                                              | 说明                       |
+| --------------------------------------------------------------- | ------------------------ |
+| `CLOUD_BASE_URL` / `CLOUD_API_KEY` / `CLOUD_MODEL`              | 云端模型（任意 OpenAI 兼容服务）     |
+| `CLOUD_EXTRA_MODELS`                                            | 同一地址下的额外模型，逗号分隔          |
+| `QISHI_DEMO_MODE`                                               | 演示模式，预置 A/B/C 账号         |
+| `QISHI_USER_DAILY_CLOUD_CALLS` / `QISHI_SITE_DAILY_CLOUD_CALLS` | 每日额度，0 表示不限              |
+| `BAIDU_API_KEY`                                                 | 百度搜索（可选）                 |
+| `QISHI_LOCAL_MODEL` / `QISHI_LOCAL_MODEL_URL`                   | 本机 llama.cpp 模型（可选，回环地址） |
 
 也可以登录后在「设置 → 模型接口」里添加自己的接口：预设 GPT / DeepSeek / Claude / Gemini / GLM / Kimi / 自定义，填模型名和 Key 即可。**Key、地址、模型名只写入本机 SQLite，接口只返回后四位。**
 
 ## 角色与治理
 
-| 能力 | 管理员 | 审核 | 普通用户 |
-| --- | --- | --- | --- |
-| 使用问答、提交反馈、建议问法 | ✅ | ✅ | ✅ |
-| 处理反馈、大模型验证、一键审核 | ✅ | ✅ | ❌ |
-| 采纳/拒绝问法建议、管理共享问答 | ✅ | ✅ | ❌ |
-| 用户管理（角色、冻结、额度） | ✅ | ❌ | ❌ |
+| 能力               | 管理员 | 审核 | 普通用户 |
+| ---------------- | --- | -- | ---- |
+| 使用问答、提交反馈、建议问法   | ✅   | ✅  | ✅    |
+| 处理反馈、大模型验证、一键审核  | ✅   | ✅  | ❌    |
+| 采纳/拒绝问法建议、管理共享问答 | ✅   | ✅  | ❌    |
+| 用户管理（角色、冻结、额度）   | ✅   | ❌  | ❌    |
 
 审核页的「已解决」会把修正结果或不修正原因，作为一条通知发进反馈者的会话；问法建议被采纳后会立即参与匹配。
 
