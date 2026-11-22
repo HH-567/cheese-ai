@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 import unicodedata
 import math
 from collections import Counter
@@ -246,6 +247,71 @@ _VISIBLE_SQL = """FROM groups g
       OR (g.scope='personal' AND g.owner_id=?))
       AND (CASE WHEN ? THEN g.review_at<=? ELSE g.review_at IS NULL OR g.review_at>? END)"""
 
+# 问答库上万条之后，逐条算相似度太慢。按字符二元组建一次倒排索引并缓存，
+# 查询时只对「有共同片段」的候选打分；问答库或问法变化时签名变化自动重建。
+_INDEX_TTL = 600.0
+_INDEX_CACHE: dict[tuple[str, bool], dict[str, Any]] = {}
+
+
+def _gram_set(text: str) -> set[str]:
+    chars = [char for char in text if not char.isspace()]
+    if len(chars) <= 1:
+        return set(chars)
+    return {left + right for left, right in zip(chars, chars[1:])}
+
+
+def _load_index(db, user_id: str, expired: bool) -> dict[str, Any]:
+    signature = db.execute(
+        "SELECT (SELECT COUNT(*) FROM groups) AS groups, (SELECT COUNT(*) FROM aliases) AS aliases,"
+        " (SELECT COUNT(*) FROM library_members) AS members, (SELECT MAX(updated_at) FROM groups) AS updated"
+    ).fetchone()
+    stamp = (signature["groups"], signature["aliases"], signature["members"], signature["updated"] or "")
+    key = (user_id, expired)
+    cached = _INDEX_CACHE.get(key)
+    now = time.monotonic()
+    if cached and cached["stamp"] == stamp and now - cached["at"] < _INDEX_TTL:
+        return cached
+
+    timestamp = now_iso()
+    rows = db.execute(f"SELECT g.*, v.answer, v.id AS version_id, v.n AS version_n {_VISIBLE_SQL}",
+                      (user_id, user_id, expired, timestamp, timestamp)).fetchall()
+    aliases_by_group: dict[str, list[dict[str, Any]]] = {}
+    for alias in db.execute("SELECT group_id,text,text_key,source FROM aliases WHERE status='active'"):
+        aliases_by_group.setdefault(alias["group_id"], []).append(dict(alias))
+
+    records: list[dict[str, Any]] = []
+    grams: list[set[str]] = []
+    index: dict[str, list[int]] = {}
+    for row in rows:
+        record = dict(row)
+        record["aliases"] = aliases_by_group.get(record["id"], [])
+        phrases = [record["original"], record["intent"] or "",
+                   *(alias["text"] for alias in record["aliases"] if alias["source"] != "observed")]
+        record_grams = _gram_set(_search_text(" ".join(phrases)))
+        for gram in record_grams:
+            index.setdefault(gram, []).append(len(records))
+        records.append(record)
+        grams.append(record_grams)
+
+    entry = {"stamp": stamp, "at": now, "records": records, "grams": grams, "index": index}
+    if len(_INDEX_CACHE) >= 4:
+        _INDEX_CACHE.pop(next(iter(_INDEX_CACHE)))
+    _INDEX_CACHE[key] = entry
+    return entry
+
+
+def _prefilter(query: str, entry: dict[str, Any], limit: int = 200) -> list[int]:
+    query_grams = _gram_set(_search_text(query))
+    if not query_grams:
+        return list(range(len(entry["records"])))
+    counts: Counter[int] = Counter()
+    for gram in query_grams:
+        for position in entry["index"].get(gram, ()):
+            counts[position] += 1
+    if not counts:
+        return []
+    return [position for position, _ in counts.most_common(limit)]
+
 _EXACT_SQL = """SELECT g.*, v.answer, v.id AS version_id, v.n AS version_n,
        a.text AS alias_text, a.source AS alias_source
     FROM aliases a
@@ -307,21 +373,12 @@ def analyze(db, query: str, user_id: str, threshold: float | None = None, *,
         return {"chosen": None, "match_type": "none", "shortlist": [], "blocked": blocked,
                 "visible_count": _visible_count(db, user_id, expired, timestamp), "threshold": threshold}
 
-    visible = db.execute(f"SELECT g.*, v.answer, v.id AS version_id, v.n AS version_n {_VISIBLE_SQL}",
-                         (user_id, user_id, expired, timestamp, timestamp)).fetchall()
-    aliases_by_group: dict[str, list[dict[str, Any]]] = {}
-    for alias in db.execute(
-        "SELECT group_id,text,text_key,source FROM aliases WHERE status='active'"
-    ).fetchall():
-        aliases_by_group.setdefault(alias["group_id"], []).append(dict(alias))
-    records = []
-    for row in visible:
-        item = dict(row)
-        item["aliases"] = aliases_by_group.get(item["id"], [])
-        records.append(item)
+    entry = _load_index(db, user_id, expired)
+    records = entry["records"]
 
     candidates: list[dict[str, Any]] = []
-    for item in records:
+    for position in _prefilter(query, entry):
+        item = records[position]
         if (item.get("source") or "").startswith("github-release:"):
             continue
         conflicts = _conflicts(query, item)
