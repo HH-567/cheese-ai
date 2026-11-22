@@ -9,19 +9,14 @@
  * ========================================================================== */
 
 /* ══ 片头里的品牌标识 ═══════════════════════════════════════════════════
-   vendor 的 .dsu-whale 只服务鲸鱼那个类名（第一幕黑底上的白标 122×122）。
-   换成柒柿的标识后由这里接管尺寸与颜色，不去动 vendor 的样式表。 */
+   新标识是图片（黑底白标 / 纸面黑标），尺寸和原来一致。 */
 #dsh-startup-root .dsu-black .dsu-brand-mark {
   display: block;
   width: 122px;
   height: 122px;
-  color: #fff;
-  fill: currentColor;
   margin-bottom: 18px;
 }
 
-/* 柒柿的标识比鲸鱼"方"：同样宽度下视觉更小，所以中间那两处稍微放大一点。
-   只覆盖尺寸，不动 vendor 的其它规则。 */
 #dsh-startup-root .dsu-logo svg {
   width: 100px;
   height: 100px;
@@ -30,6 +25,59 @@
 #dsh-startup-root .dsu-w3 svg {
   width: 108px;
   height: 108px;
+}
+
+/* 纸面 logo：手写路径动画（右上起笔 → 左上 → 左下 → 右下收笔），再补小元素，最后填充。 */
+#dsh-startup-root .dsu-logo svg.cheese-write .cheese-pen {
+  animation: cheese-pen 1150ms cubic-bezier(0.55, 0.06, 0.24, 1) both;
+}
+
+#dsh-startup-root .dsu-logo svg.cheese-write .cheese-part {
+  animation: cheese-part 520ms ease-out both;
+}
+
+#dsh-startup-root .dsu-logo svg.cheese-write .cheese-outline-group {
+  animation: cheese-outline-hide 320ms ease 1780ms both;
+}
+
+#dsh-startup-root .dsu-logo svg.cheese-write .cheese-fill-shapes {
+  animation: cheese-solid 320ms ease 1780ms both;
+}
+
+/* 收笔后落回原版标识图（尺寸和形状与黑标一致），手写过程淡出。 */
+#dsh-startup-root .dsu-logo svg.cheese-write image.cheese-final {
+  opacity: 0;
+  animation: cheese-solid 280ms ease 2180ms both;
+}
+
+#dsh-startup-root .dsu-logo svg.cheese-write .cheese-drawing {
+  animation: cheese-outline-hide 280ms ease 2180ms both;
+}
+
+@keyframes cheese-pen {
+  from { stroke-dashoffset: 100; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes cheese-part {
+  from { stroke-dashoffset: 100; opacity: 0; }
+  to { stroke-dashoffset: 0; opacity: 1; }
+}
+
+@keyframes cheese-solid {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes cheese-outline-hide {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* 欢迎页直接用实心黑标，不做填充动效。 */
+#dsh-startup-root .dsu-w3 image.cheese-fill {
+  opacity: 1;
+  clip-path: none;
 }
 
 /* 登录卡 / 控制台顶栏上的小标识 */
@@ -47,17 +95,17 @@
    所以在这里整块覆盖 —— 色、光晕、logo 投影一起换，不然会剩一圈蓝边。 */
 #dsh-startup-root.dsu-peak .dsu-w1,
 #dsh-startup-root.dsu-peak .dsu-w4 {
-  color: var(--dsu-accent, #ff7500);
-  text-shadow: 0 0 16px rgba(255, 117, 0, 0.55);
+  color: #e0a800;
+  text-shadow: 0 0 16px rgba(255, 216, 74, 0.6);
 }
 
 #dsh-startup-root.dsu-peak .dsu-w3 svg {
-  filter: drop-shadow(0 0 12px rgba(255, 117, 0, 0.45));
+  filter: drop-shadow(0 0 12px rgba(255, 216, 74, 0.5));
 }
 
-/* 色散那一下：青蓝副本也换成橙，冷暖反转但仍然是双色错位 */
+/* 色散那一下：青蓝副本也换成品牌黄，冷暖反转但仍然是双色错位 */
 #dsh-startup-root .dsu-glitch[data-text]::after {
-  color: var(--dsu-accent, #ff7500);
+  color: #e0a800;
 }
 
 /* 空着的片头挂载点 = 一条透明但挡鼠标的全屏层，永远不该存在 */

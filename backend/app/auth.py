@@ -34,6 +34,24 @@ def _secret() -> bytes:
     return config.SECRET_PATH.read_bytes()
 
 
+def sign_scoped_payload(scope: str, payload: dict[str, Any]) -> str:
+    body = _b64(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    signature = _b64(hmac.new(_secret(), f"{scope}:{body}".encode("ascii"), hashlib.sha256).digest())
+    return f"{body}.{signature}"
+
+
+def read_scoped_payload(scope: str, token: str) -> dict[str, Any] | None:
+    try:
+        body, signature = token.split(".", 1)
+        expected = _b64(hmac.new(_secret(), f"{scope}:{body}".encode("ascii"), hashlib.sha256).digest())
+        if not hmac.compare_digest(signature, expected):
+            return None
+        payload = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+        return payload if isinstance(payload, dict) else None
+    except (ValueError, TypeError):
+        return None
+
+
 def auth_attempt(request: Request, action: str, *, seconds: int, limit: int, site_limit: int | None = None) -> None:
     now = int(time.time())
     window = now // seconds * seconds
@@ -107,13 +125,15 @@ def current_user(request: Request) -> dict[str, Any]:
     db = connect()
     try:
         row = db.execute(
-            """SELECT u.id,u.name,u.role,u.verified,s.id AS sid FROM users u
+            """SELECT u.id,u.name,u.role,u.verified,u.frozen,s.id AS sid FROM users u
                JOIN auth_sessions s ON s.user_id=u.id
                WHERE u.id=? AND s.id=? AND s.revoked=0 AND s.expires_at>?""",
             (payload.get("sub"), payload.get("sid"), int(time.time())),
         ).fetchone()
         if not row:
             raise HTTPException(status_code=401, detail="登录已失效")
+        if row["frozen"]:
+            raise HTTPException(status_code=403, detail="账号已被冻结，请联系管理员")
         return dict(row)
     finally:
         db.close()

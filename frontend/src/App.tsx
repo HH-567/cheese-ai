@@ -3,9 +3,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   Archive, ArrowDown, ArrowLeftRight, BookOpen, Check, ChevronRight, CircleHelp,
-  Cloud, Copy, Database, FileText, Flag, Gauge, History, LoaderCircle, LockKeyhole, LogOut,
-  Menu, MessageSquare, MoreHorizontal, Paperclip, Plus, RefreshCw, Search, Send, Settings2, ShieldCheck,
-  Sparkles, ThumbsDown, Type, Wrench, X,
+  Cloud, Copy, Database, FileText, Flag, Gauge, History, Import, LoaderCircle, LockKeyhole, LogOut,
+  ListChecks, Menu, MessageSquare, MoreHorizontal, Paperclip, Plus, RefreshCw, Search, Send, Settings2, ShieldCheck,
+  Plug, Sparkles, ThumbsDown, Type, UserCog, Users, Wrench, X,
 } from 'lucide-react';
 
 import LoginScreen, { DEMO_PASSWORD, type User } from './LoginScreen';
@@ -15,9 +15,19 @@ import { VoiceInput } from './VoiceInput';
 import { PersonalMemorySettings } from './PersonalMemorySettings';
 import { KnowledgeLibrary } from './KnowledgeLibrary';
 import { ReusableMethods } from './ReusableMethods';
+import { WorkBench } from './WorkBench';
+import { ChatImport, SaveConversationQuestion } from './ChatImport';
+import { ConversationNavigator } from './ConversationNavigator';
 import { codeRenderers } from './CodeCard';
 type Trace = { key: string; label: string; state: 'ok' | 'skip' | 'fail' | 'run'; detail: string };
 type LearnTask = { group_id: string; state: 'queued' | 'running' | 'done' | 'failed'; alias_count: number; waiting_for_quota?: boolean };
+type SearchProvider = 'baidu' | 'wikipedia' | 'deepseek' | 'brave';
+type SearchOption = { id: SearchProvider; label: string; configured?: boolean };
+const searchOptions: SearchOption[] = [
+  { id: 'baidu', label: '百度' },
+  { id: 'wikipedia', label: '维基百科' },
+  { id: 'deepseek', label: 'DeepSeek 搜索' },
+];
 type Meta = {
   message_id?: string;
   source?: string; group_id?: string; version_id?: string; matched_alias?: string; match_type?: string;
@@ -27,10 +37,12 @@ type Meta = {
   learn_task?: LearnTask;
   group_scope?: string; group_owner_id?: string; group_can_manage?: boolean;
   personal_memory_command?: boolean;
-  web_search?: boolean; web_sources?: WebSource[]; search_provider?: string; search_url?: string;
+  web_search?: boolean; web_sources?: WebSource[]; search_provider?: string; search_provider_id?: SearchProvider; search_url?: string;
   knowledge?: boolean; requested_model?: string;
   document_id?: string; document_name?: string; document_sources?: DocumentSource[];
   image_id?: string; image_name?: string;
+  import_provider?: string;
+  regenerate_of?: string;
   reask_of?: { group_id: string; version_id: string }; error?: string; tool?: string; timezone?: string;
 };
 type Message = { id: string; role: 'user' | 'assistant'; content: string; source?: string; status?: string; meta?: Meta; error?: string };
@@ -43,31 +55,54 @@ type Group = {
   versions?: { id: string; n: number; answer: string; basis: string; status: string; created_at: string; variants?: { id: string; style: string; text: string }[] }[];
   learn_task?: LearnTask | null;
   can_manage?: boolean;
+  share_status?: 'pending' | 'approved' | 'rejected';
   updated_at: string;
 };
 type Settings = {
   timezone: string; threshold: number; auto_learn: number; default_scope: string; max_context_turns: number;
   pause_threshold: number; pause_window_days: number; cloud_online: boolean; model: string; demo_mode: boolean;
   shared_member: boolean;
+  is_admin?: boolean;
   font_scale: number;
   auto_alias: number;
   session_summary_enabled: number; personal_memory_enabled: number;
-  search_provider?: string;
+  default_search_provider?: SearchProvider;
+  search_providers?: SearchOption[];
   text_models?: string[]; vision_model?: string;
   local_model?: string;
   models?: { id: string; label: string; kind: string; default: boolean; enabled: boolean; available: boolean }[];
   disabled_models?: string[];
   vision_available?: boolean; speech_available?: boolean;
 };
-type MemberQuota = { id: string; name: string; role: string; daily_cloud_calls: number | null; limit: number | null; used_today: number };
+type Provider = { id: string; provider: string; label: string; base_url: string; model: string; enabled: boolean; has_key: boolean; key_hint: string };
+type ProviderList = { presets: { id: string; label: string; base_url: string; model: string }[]; providers: Provider[] };
+type MemberQuota = { id: string; name: string; role: string; frozen: boolean; daily_cloud_calls: number | null; limit: number | null; used_today: number };
 type MemberQuotaList = { default_limit: number | null; site_limit: number | null; members: MemberQuota[] };
 type Quota = { limit: number | null; used: number; site_exhausted: boolean; resets_at: string };
-type Usage = { total: number; zero_cloud: number; zero_cloud_rate: number; cloud_calls: number; answer_calls: number; learn_calls: number; summary_calls: number; cost: number; cost_configured: boolean; cost_per_100: number | null; median_total_ms: number; paths: Record<string, number>; requests: { at: string; query: string; path: string; cloud_calls: number; total_ms: number; cost: number }[]; quota: Quota };
+type Usage = {
+  total: number; zero_cloud: number; zero_cloud_rate: number; cloud_calls: number; answer_calls: number;
+  learn_calls: number; summary_calls: number; cost: number; cost_configured: boolean; cost_per_100: number | null;
+  median_total_ms: number; paths: Record<string, number>; quota: Quota;
+  work: { total: number; completed: number; zero_cloud: number; cloud_calls: number; average_cloud_calls: number };
+  requests: { at: string; query: string; path: string; cloud_calls: number; total_ms: number; ok: number }[];
+};
+const usagePathNames: Record<string, string> = {
+  exact: '原问命中', alias: '等价问法', semantic: '意图匹配', tool: '本地工具', method: '复用方法',
+  local_model: '本地模型', cloud: '云端回答', search: '网页搜索', document: '文件问答', image: '图片理解',
+  knowledge: '共享资料', learn: '后台改写', clarify: '澄清问题', revision: '发布修订', summary: '会话摘要',
+  work_rule: 'Work 本地规则', work_cloud: 'Work 云端代理', shared_review: '共享库大模型审核',
+};
+type GroupPage = { items: Group[]; total: number; page: number; page_size: number };
+type SharedSubmission = { id: string; original: string; answer: string; submitter: string; created_at: string };
 type Governance = {
-  reports: { id: string; group_id?: string; original: string; answer?: string; reporter: string; category: string; note: string; status: string; created_at: string }[];
-  suspensions: { id: string; group_id: string; original: string; kind: string; reason: string; status: string; can_manage: boolean }[];
-  revisions: { id: string; group_id: string; original: string; proposer: string; proposed_answer: string; note: string; status: string; can_manage: boolean }[];
-  metrics: { open: number; suspended: number; pending_revisions: number };
+  can_manage_shared: boolean;
+  shared_submissions: SharedSubmission[];
+  alias_suggestions?: { id: string; group_id: string; original: string; text: string; note: string; suggester: string; created_at: string }[];
+  alias_suggestion_history?: { id: string; group_id: string; original: string; text: string; note: string; suggester: string; handler?: string | null; status: string; reply?: string | null; created_at: string; handled_at?: string | null }[];
+  reports: { id: string; group_id?: string; message_id?: string; scope?: string; original: string; answer?: string; reporter: string; category: string; note: string; status: string; resolution?: string | null; reply?: string | null; can_resolve?: boolean; created_at: string }[];
+  suspensions: { id: string; group_id: string; scope: string; original: string; kind: string; reason: string; status: string; can_manage: boolean }[];
+  revisions: { id: string; group_id: string; scope: string; original: string; proposer: string; proposed_answer: string; note: string; status: string; can_manage: boolean }[];
+  metrics: { open: number; suspended: number; pending_revisions: number; pending_aliases?: number };
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? '';
@@ -106,7 +141,7 @@ function fmtDate(value?: string) {
 }
 
 function sourceName(source?: string) {
-  return ({ library: '问答库', knowledge: '共享知识库', cloud: '云端生成', local_model: '本地模型', search: '网页搜索', document: '文件问答', image: '图片理解', tool: '本地工具', local: '本地澄清', error: '未完成' } as Record<string, string>)[source ?? ''] ?? '等待中';
+  return ({ library: '问答库', knowledge: '共享知识库', imported: '已导入', cloud: '云端生成', local_model: '本地模型', search: '网页搜索', document: '文件问答', image: '图片理解', tool: '本地工具', local: '本地澄清', error: '未完成' } as Record<string, string>)[source ?? ''] ?? '等待中';
 }
 
 function learningPending(task?: LearnTask | null) {
@@ -134,16 +169,40 @@ function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [providers, setProviders] = useState<ProviderList | null>(null);
+  const [providerPreset, setProviderPreset] = useState('openai');
+  const [providerModel, setProviderModel] = useState('');
+  const [providerBaseUrl, setProviderBaseUrl] = useState('https://api.openai.com/v1');
+  const [providerKey, setProviderKey] = useState('');
+  const [providerBusy, setProviderBusy] = useState(false);
   const [memberQuotas, setMemberQuotas] = useState<MemberQuotaList | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [governance, setGovernance] = useState<Governance | null>(null);
+  const [resolveTarget, setResolveTarget] = useState<Governance['reports'][number] | null>(null);
+  const [resolveMode, setResolveMode] = useState<'fixed' | 'kept'>('fixed');
+  const [resolveAnswer, setResolveAnswer] = useState('');
+  const [resolveReply, setResolveReply] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [verifyAdvice, setVerifyAdvice] = useState('');
+  const [autoReviewing, setAutoReviewing] = useState(false);
+  const [pendingWork, setPendingWork] = useState<{ total: number; reports: number; submissions: number; aliases?: number } | null>(null);
+  const [governanceEntryId, setGovernanceEntryId] = useState<string>();
   const [usage, setUsage] = useState<Usage | null>(null);
   const [filter, setFilter] = useState('all');
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [search, setSearch] = useState('');
-  const [groupLimit, setGroupLimit] = useState(200);
+  const [groupPage, setGroupPage] = useState(1);
+  const [groupSize, setGroupSize] = useState(25);
+  const [groupTotal, setGroupTotal] = useState(0);
+  const [shareSelection, setShareSelection] = useState<Set<string>>(new Set());
+  const [sharing, setSharing] = useState(false);
+  const groupRequest = useRef(0);
+  const groupPath = '/api/groups?' + new URLSearchParams({ filter, q: search, page: String(groupPage), page_size: String(groupSize) });
+  const groupPages = Math.max(1, Math.ceil(groupTotal / groupSize));
   const [input, setInput] = useState('');
   const [webSearch, setWebSearch] = useState(false);
+  const [searchProviderChoice, setSearchProviderChoice] = useState<SearchProvider>();
+  const selectedSearchProvider = searchProviderChoice ?? settings?.default_search_provider ?? 'baidu';
   const [useKnowledge, setUseKnowledge] = useState(false);
   const [selectedModel, setSelectedModel] = useState('');
   const [fileSelection, setFileSelection] = useState<{ sessionId: string; id: string; kind: 'images' | 'documents' } | null>(null);
@@ -154,6 +213,8 @@ function App() {
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [error, setError] = useState('');
   const [reportTarget, setReportTarget] = useState<Message | null>(null);
+  const [showChatImport, setShowChatImport] = useState(false);
+  const [questionDraft, setQuestionDraft] = useState<{ sessionId: string; messageId: string; question: string; answer: string }>();
   const [reportCategory, setReportCategory] = useState('mismatch');
   const [reportNote, setReportNote] = useState('');
   const [toast, setToast] = useState('');
@@ -162,6 +223,8 @@ function App() {
   const uploadRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const autoFollow = useRef(true);
+  const messages = session?.messages;
+  const conversationTurns = useMemo(() => messages?.filter((message) => message.role === 'user') ?? [], [messages]);
   const activeSelection = fileSelection?.sessionId === session?.id ? fileSelection : null;
   const activeFile = activeSelection && session?.[activeSelection.kind]?.find((file) => file.id === activeSelection.id);
   const activeImage = activeSelection?.kind === 'images' ? activeFile : null;
@@ -188,6 +251,17 @@ function App() {
     }
   }, [session?.id, settings?.default_scope]);
 
+  const refreshGroupList = useCallback(async () => {
+    const epoch = workspaceEpoch.current;
+    const request = ++groupRequest.current;
+    const data = await api<GroupPage>(groupPath);
+    if (epoch !== workspaceEpoch.current || request !== groupRequest.current) return;
+    setGroups(data.items);
+    setGroupTotal(data.total);
+    const last = Math.max(1, Math.ceil(data.total / data.page_size));
+    if (data.page > last) setGroupPage(last);
+  }, [groupPath]);
+
   const loadPage = useCallback(async (target: string) => {
     if (!user) return;
     const epoch = workspaceEpoch.current;
@@ -195,8 +269,7 @@ function App() {
     setError('');
     try {
       if (target === 'library') {
-        const data = await api<Group[]>(`/api/groups?filter=${filter}&q=${encodeURIComponent(search)}&limit=${groupLimit}`);
-        if (epoch === workspaceEpoch.current) setGroups(data);
+        await refreshGroupList();
       } else if (target === 'governance') {
         const data = await api<Governance>('/api/governance');
         if (epoch === workspaceEpoch.current) setGovernance(data);
@@ -212,7 +285,7 @@ function App() {
     } finally {
       if (epoch === workspaceEpoch.current) setPageBusy(false);
     }
-  }, [filter, search, groupLimit, user]);
+  }, [refreshGroupList, user]);
 
   useEffect(() => {
     let active = true;
@@ -245,6 +318,9 @@ function App() {
   }, [loadPage, page]);
 
   const lastContentLength = session?.messages?.[session.messages.length - 1]?.content.length ?? 0;
+  const lastAssistantId = session?.messages ? [...session.messages].reverse().find((item) => item.role === 'assistant')?.id : undefined;
+  const openReports = governance?.reports.filter((item) => item.status === 'open') ?? [];
+  const resolvedReports = governance?.reports.filter((item) => item.status !== 'open') ?? [];
   // 打字过程中关掉平滑滚动，否则频繁的 scrollTop 赋值会互相打断，追不上新字。
   useEffect(() => {
     const node = scrollRef.current;
@@ -270,9 +346,9 @@ function App() {
     document.documentElement.style.setProperty('--ui-zoom', String(scale / 100));
   }, [settings?.font_scale]);
 
-  // 管理员打开设置页时读取成员额度；普通成员看不到这一块。
+  // 管理员打开「用户管理」时读取成员列表。
   useEffect(() => {
-    if (page !== 'settings' || user?.role !== 'admin') {
+    if (page !== 'members' || user?.role !== 'admin') {
       setMemberQuotas(null);
       return;
     }
@@ -364,17 +440,26 @@ function App() {
     setSession(null);
     setSessions([]);
     setGroups([]);
+    setGroupTotal(0);
+    setGroupPage(1);
+    setGroupSize(25);
+    setShareSelection(new Set());
+    setSharing(false);
     setSelectedGroup(null);
     setGovernance(null);
+    setGovernanceEntryId(undefined);
     setSettings(null);
     setUsage(null);
     setInput('');
     setWebSearch(false);
+    setSearchProviderChoice(undefined);
     setUseKnowledge(false);
     setSelectedModel('');
     setFileSelection(null);
     setUploading(false);
     setReportTarget(null);
+    setShowChatImport(false);
+    setQuestionDraft(undefined);
     setPage('chat');
   };
 
@@ -417,6 +502,31 @@ function App() {
     catch (cause) { notify(cause instanceof Error ? cause.message : '打开会话失败'); }
   };
 
+  const openImportedChat = async (id: string, count: number) => {
+    setShowChatImport(false);
+    try {
+      await refreshSessions(id);
+      setInput('');
+      setWebSearch(false);
+      setUseKnowledge(false);
+      setSelectedModel('');
+      setFileSelection(null);
+      setPage('chat');
+      setMobileNav(false);
+      notify('已导入 ' + count + ' 条会话');
+    } catch {
+      notify('导入已完成，刷新页面后可在会话列表查看');
+    }
+  };
+
+  const extractQuestion = (message: Message) => {
+    if (!session?.messages) return;
+    const index = session.messages.findIndex((item) => item.id === message.id);
+    const preceding = session.messages.slice(0, Math.max(0, index)).reverse();
+    setQuestionDraft({ sessionId: session.id, messageId: message.id,
+      question: preceding.find((item) => item.role === 'user')?.content ?? '', answer: message.content });
+  };
+
   const changeScope = async (scope: string) => {
     if (!session) return;
     try {
@@ -456,26 +566,36 @@ function App() {
   };
 
   const send = async (rawText: string, forceCloud = false, reaskOf?: { group_id: string; version_id: string }, search = false,
-    documentId?: string, imageId?: string, knowledge = false, model = selectedModel) => {
+    documentId?: string, imageId?: string, knowledge = false, model = selectedModel, searchProvider?: SearchProvider,
+    regenerateOf?: string) => {
     const text = rawText.trim();
     if (!text || !session || busy || uploading) return;
+    const requestMeta: Meta = { query: text, reask_of: reaskOf, web_search: search, search_provider_id: searchProvider,
+      document_id: documentId, image_id: imageId, knowledge, requested_model: model || undefined, regenerate_of: regenerateOf };
     setBusy(true);
     setError('');
     autoFollow.current = true;
     const userId = `local-user-${crypto.randomUUID()}`;
     const assistantId = `pending-${crypto.randomUUID()}`;
-    setSession((current) => current ? {
-      ...current,
-      messages: [...(current.messages ?? []),
-        { id: userId, role: 'user', content: text, meta: imageId ? { image_id: imageId, image_name: session.images?.find((image) => image.id === imageId)?.name } : undefined },
-        { id: assistantId, role: 'assistant', content: '', status: 'streaming', meta: { query: text, trace: [], web_search: search, document_id: documentId, image_id: imageId, knowledge, requested_model: model || undefined } },
-      ],
-    } : current);
+    setSession((current) => {
+      if (!current) return current;
+      // 重新回答：先把上一条回答从列表里去掉，只追加一个新的流式占位，不再重复插入用户消息。
+      const kept = regenerateOf ? (current.messages ?? []).filter((item) => item.id !== regenerateOf) : (current.messages ?? []);
+      return {
+        ...current,
+        messages: [
+          ...kept,
+          ...(regenerateOf ? [] : [{ id: userId, role: 'user' as const, content: text, meta: imageId ? { image_id: imageId, image_name: session.images?.find((image) => image.id === imageId)?.name } : undefined }]),
+          { id: assistantId, role: 'assistant' as const, content: '', status: 'streaming', meta: { ...requestMeta, trace: [] } },
+        ],
+      };
+    });
     try {
       const response = await fetch(`${API_BASE}/api/sessions/${session.id}/messages`, {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, force_cloud: forceCloud, reask_of: reaskOf ?? null, web_search: search,
-          document_id: documentId, image_id: imageId, knowledge, model: imageId ? undefined : model || undefined }),
+        body: JSON.stringify({ text, force_cloud: forceCloud, reask_of: reaskOf ?? null, web_search: search, search_provider: searchProvider,
+          document_id: documentId, image_id: imageId, knowledge, model: imageId ? undefined : model || undefined,
+          regenerate_of: regenerateOf }),
       });
       if (!response.ok || !response.body) {
         let message = `请求失败（${response.status}）`;
@@ -506,7 +626,8 @@ function App() {
         if (event === 'error') {
           completed = true;
           const message = String(data.message ?? '云端暂时不可用');
-          setSession((current) => current ? { ...current, messages: (current.messages ?? []).map((item) => item.id === assistantId ? { ...item, id: String(data.message_id ?? item.id), status: 'error', source: 'error', error: message, meta: { query: text, reask_of: reaskOf, web_search: search, document_id: documentId, image_id: imageId, knowledge, requested_model: model || undefined } } : item) } : current);
+          const provider = data.search_provider_id as SearchProvider | undefined;
+          setSession((current) => current ? { ...current, messages: (current.messages ?? []).map((item) => item.id === assistantId ? { ...item, id: String(data.message_id ?? item.id), status: 'error', source: 'error', error: message, meta: { ...requestMeta, search_provider_id: provider ?? searchProvider } } : item) } : current);
         }
         event = 'message';
       };
@@ -523,7 +644,7 @@ function App() {
       await refreshSessions(session.id);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : '发送失败';
-      setSession((current) => current ? { ...current, messages: (current.messages ?? []).map((item) => item.id === assistantId ? { ...item, status: 'error', source: 'error', error: message, meta: { query: text, reask_of: reaskOf, web_search: search, document_id: documentId, image_id: imageId, knowledge, requested_model: model || undefined } } : item) } : current);
+      setSession((current) => current ? { ...current, messages: (current.messages ?? []).map((item) => item.id === assistantId ? { ...item, status: 'error', source: 'error', error: message, meta: requestMeta } : item) } : current);
       setError(message);
     } finally { setBusy(false); }
   };
@@ -531,13 +652,16 @@ function App() {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!input.trim() || !session || busy || uploading) return;
-    if (webSearch && [...input.trim()].length > 350) {
-      setError('请将网页搜索问题缩短到 350 个字符以内');
+    const searchEnabled = webSearch && !activeFile;
+    const searchLimit = selectedSearchProvider === 'deepseek' ? 128 : 350;
+    if (searchEnabled && [...input.trim().replace(/\s+/g, ' ')].length > searchLimit) {
+      setError('请将网页搜索问题缩短到 ' + searchLimit + ' 个字符以内。');
       return;
     }
     setInput('');
     inputRef.current?.focus({ preventScroll: true });
-    void send(input, false, undefined, webSearch && !activeFile, activeDocument?.id, activeImage?.id, useKnowledge && !activeFile);
+    void send(input, false, undefined, searchEnabled, activeDocument?.id, activeImage?.id, useKnowledge && !activeFile,
+      selectedModel, searchEnabled ? selectedSearchProvider : undefined);
   };
   const handleInputKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -555,9 +679,22 @@ function App() {
     } catch (cause) { notify(cause instanceof Error ? cause.message : '反馈提交失败'); }
   };
 
-  const refreshGroupList = async () => {
-    const result = await api<Group[]>(`/api/groups?filter=${filter}&q=${encodeURIComponent(search)}&limit=${groupLimit}`);
-    setGroups(result);
+  const submitShared = async () => {
+    setSharing(true);
+    const epoch = workspaceEpoch.current;
+    try {
+      const result = await api<{ submitted: number; skipped: number }>('/api/shared-submissions', {
+        method: 'POST', body: JSON.stringify({ group_ids: [...shareSelection] }),
+      });
+      if (epoch !== workspaceEpoch.current) return;
+      setShareSelection(new Set());
+      notify('已提交 ' + result.submitted + ' 条待审核' + (result.skipped ? '，跳过 ' + result.skipped + ' 条重复申请' : ''));
+      await refreshGroupList();
+    } catch (cause) {
+      if (epoch === workspaceEpoch.current) notify(cause instanceof Error ? cause.message : '提交失败');
+    } finally {
+      if (epoch === workspaceEpoch.current) setSharing(false);
+    }
   };
 
   const openGroup = async (group: Group) => {
@@ -571,6 +708,7 @@ function App() {
       const group = await api<Group>(`/api/groups/${id}`);
       setFilter('all');
       setSearch('');
+      setGroupPage(1);
       setSelectedGroup(group);
       setPage('library');
     } catch (cause) { notify(cause instanceof Error ? cause.message : '无法打开问答'); }
@@ -593,12 +731,158 @@ function App() {
     } catch (cause) { notify(cause instanceof Error ? cause.message : '操作失败'); }
   };
 
+  const openResolveReport = (report: Governance['reports'][number]) => {
+    setResolveTarget(report);
+    setResolveMode('fixed');
+    setResolveAnswer(report.answer ?? '');
+    setResolveReply('');
+    setVerifyAdvice('');
+    setVerifying(false);
+  };
+
+  const refreshPending = useCallback(async () => {
+    if (!settings?.is_admin) { setPendingWork(null); return; }
+    try {
+      setPendingWork(await api<{ total: number; reports: number; submissions: number; aliases?: number }>('/api/governance/pending'));
+    } catch { /* 未登录或没有权限时忽略 */ }
+  }, [settings?.is_admin]);
+
+  useEffect(() => {
+    if (!settings?.is_admin) { setPendingWork(null); return; }
+    void refreshPending();
+    const timer = window.setInterval(() => void refreshPending(), 60000);
+    return () => window.clearInterval(timer);
+  }, [refreshPending, settings?.is_admin]);
+
+  const verifyWithModel = async () => {
+    if (!resolveTarget || verifying) return;
+    setVerifying(true);
+    try {
+      const result = await api<{ valid: boolean; suggested_answer: string; advice: string }>(
+        `/api/reports/${resolveTarget.id}/verify`, { method: 'POST' });
+      setVerifyAdvice(result.advice);
+      if (result.valid && result.suggested_answer) {
+        setResolveMode('fixed');
+        setResolveAnswer(result.suggested_answer);
+        notify('大模型认为反馈成立，已填入建议答案');
+      } else {
+        setResolveMode('kept');
+        setResolveReply(result.advice);
+        notify('大模型认为反馈不成立，已填入原因');
+      }
+    } catch (cause) { notify(cause instanceof Error ? cause.message : '大模型验证失败'); }
+    finally { setVerifying(false); }
+  };
+
+  const autoReviewReports = async () => {
+    if (autoReviewing) return;
+    setAutoReviewing(true);
+    try {
+      const result = await api<{ total: number; fixed: number; kept: number; errors: string[] }>(
+        '/api/reports/auto-review', { method: 'POST' });
+      setGovernance(await api<Governance>('/api/governance'));
+      await refreshPending();
+      notify(result.total ? `一键审核完成：修正 ${result.fixed} 条，保留 ${result.kept} 条` : '没有待处理的反馈');
+      if (result.errors.length) notify(`有 ${result.errors.length} 条处理失败`);
+    } catch (cause) { notify(cause instanceof Error ? cause.message : '一键审核失败'); }
+    finally { setAutoReviewing(false); }
+  };
+
+  const submitResolveReport = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!resolveTarget) return;
+    if (resolveMode === 'fixed' && !resolveAnswer.trim()) { notify('请填写修正后的答案'); return; }
+    try {
+      const result = await api<{ ok: boolean; notified: boolean }>(`/api/reports/${resolveTarget.id}/resolve`, {
+        method: 'POST',
+        body: JSON.stringify({ resolution: resolveMode, answer: resolveMode === 'fixed' ? resolveAnswer : null,
+          reply: resolveReply }),
+      });
+      setGovernance(await api<Governance>('/api/governance'));
+      setResolveTarget(null);
+      await refreshPending();
+      notify(result.notified ? '已解决，处理结果已发给反馈者' : '已解决，但没有找到反馈者的会话');
+    } catch (cause) { notify(cause instanceof Error ? cause.message : '处理失败'); }
+  };
+
   const resolveRevision = async (id: string, action: string) => {
     try {
       await api(`/api/revisions/${id}/resolve`, { method: 'POST', body: JSON.stringify({ action }) });
       setGovernance(await api<Governance>('/api/governance'));
       notify(action === 'publish' ? '修订已发布为新版本' : '建议已处理');
     } catch (cause) { notify(cause instanceof Error ? cause.message : '操作失败'); }
+  };
+
+  const resolveAliasSuggestion = async (id: string, action: 'adopt' | 'reject') => {
+    try {
+      const result = await api<{ ok: boolean; status: string; notified: boolean }>(`/api/alias-suggestions/${id}/resolve`, {
+        method: 'POST', body: JSON.stringify({ action }),
+      });
+      setGovernance(await api<Governance>('/api/governance'));
+      await refreshPending();
+      notify(result.notified ? (action === 'adopt' ? '已采纳并通知建议者' : '已拒绝并通知建议者') : '已处理');
+    } catch (cause) { notify(cause instanceof Error ? cause.message : '处理失败'); }
+  };
+
+  useEffect(() => {
+    if (page !== 'settings') return;
+    void api<ProviderList>('/api/providers').then((data) => {
+      setProviders(data);
+      const preset = data.presets.find((item) => item.id === providerPreset);
+      if (preset && !providerBaseUrl) setProviderBaseUrl(preset.base_url);
+    }).catch(() => setProviders(null));
+  }, [page]);
+
+  const refreshProviders = async () => {
+    setProviders(await api<ProviderList>('/api/providers'));
+    setSettings(await api<Settings>('/api/settings'));
+  };
+
+  const addProvider = async () => {
+    if (providerBusy) return;
+    setProviderBusy(true);
+    try {
+      await api('/api/providers', {
+        method: 'POST',
+        body: JSON.stringify({ provider: providerPreset, base_url: providerBaseUrl, model: providerModel.trim(),
+          api_key: providerKey.trim() }),
+      });
+      setProviderModel('');
+      setProviderKey('');
+      await refreshProviders();
+      notify('模型接口已添加，已出现在「回答模型」列表里');
+    } catch (cause) {
+      notify(cause instanceof Error ? cause.message : '添加失败');
+    } finally {
+      setProviderBusy(false);
+    }
+  };
+
+  const removeProvider = async (id: string) => {
+    if (providerBusy) return;
+    setProviderBusy(true);
+    try {
+      await api(`/api/providers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      await refreshProviders();
+      notify('模型接口已删除');
+    } catch (cause) {
+      notify(cause instanceof Error ? cause.message : '删除失败');
+    } finally {
+      setProviderBusy(false);
+    }
+  };
+
+  const testProvider = async (id: string) => {
+    if (providerBusy) return;
+    setProviderBusy(true);
+    try {
+      const result = await api<{ ok: boolean; reply: string }>(`/api/providers/${encodeURIComponent(id)}/test`, { method: 'POST' });
+      notify(`连接成功：${result.reply || 'ok'}`);
+    } catch (cause) {
+      notify(cause instanceof Error ? cause.message : '连接失败');
+    } finally {
+      setProviderBusy(false);
+    }
   };
 
   const saveSettings = async (patch: Partial<Settings>) => {
@@ -617,7 +901,7 @@ function App() {
     } catch (cause) { notify(cause instanceof Error ? cause.message : '保存失败'); }
   };
 
-  const pageTitle = ({ chat: '聊天', library: '问答库', knowledge: '共享知识库', methods: '复用方法', governance: '审核与治理', usage: '用量与成本', settings: '设置' } as Record<string, string>)[page] ?? '聊天';
+  const pageTitle = ({ chat: '聊天', library: '问答库', knowledge: '共享知识库', work: 'Work 工作台', methods: '复用方法', governance: '审核与治理', members: '用户管理', usage: '用量与成本', settings: '设置' } as Record<string, string>)[page] ?? '聊天';
   const activeTrace = useMemo(() => [...(session?.messages ?? [])].reverse().find((message) => message.role === 'assistant' && message.meta?.trace?.length)?.meta?.trace ?? [], [session?.messages]);
 
   if (!authReady) return <div className="login-loading" role="status" aria-label="正在检查会话" />;
@@ -635,16 +919,20 @@ function App() {
     <div className="app-shell">
       <aside className={`sidebar ${mobileNav ? 'sidebar--open' : ''}`}>
         <a className="brand" href="#chat" onClick={(event) => { event.preventDefault(); setPage('chat'); }}>
-          <span className="brand-mark"><Sparkles size={19} /></span>
+          <img className="brand-mark" src="/icons/cheese-app.png" alt="柒柿AI" />
           <span><strong>柒柿AI</strong><small>通用助手</small></span>
         </a>
         <button className="new-chat" onClick={() => void newChat()}><Plus size={17} /><span>新建聊天</span><kbd>Ctrl K</kbd></button>
+        <button className="sidebar-import" type="button" disabled={busy || uploading}
+          onClick={() => setShowChatImport(true)}><Import size={16} />导入 AI 对话</button>
         <nav className="primary-nav" aria-label="主导航">
           <button className={page === 'chat' ? 'active' : ''} onClick={() => { setPage('chat'); setMobileNav(false); }}><MessageSquare size={17} /><span>聊天</span><small>{sessions.length || ''}</small></button>
           <button className={page === 'library' ? 'active' : ''} onClick={() => { setPage('library'); setMobileNav(false); }}><BookOpen size={17} /><span>问答库</span><small>{groups.length || ''}</small></button>
           {settings?.shared_member && <button className={page === 'knowledge' ? 'active' : ''} onClick={() => { setPage('knowledge'); setMobileNav(false); }}><FileText size={17} /><span>共享知识库</span></button>}
+          <button className={page === 'work' ? 'active' : ''} onClick={() => { setPage('work'); setMobileNav(false); }}><ListChecks size={17} /><span>Work 工作台</span></button>
           <button className={page === 'methods' ? 'active' : ''} onClick={() => { setPage('methods'); setMobileNav(false); }}><Wrench size={17} /><span>复用方法</span></button>
-          <button className={page === 'governance' ? 'active' : ''} onClick={() => { setPage('governance'); setMobileNav(false); }}><Flag size={17} /><span>审核</span><small>{(governance?.metrics.open ?? 0) || ''}</small></button>
+          <button className={page === 'governance' ? 'active' : ''} onClick={() => { setPage('governance'); setMobileNav(false); }}><Flag size={17} /><span>审核</span>{settings?.is_admin ? (pendingWork && pendingWork.total > 0 ? <em className="nav-badge">{pendingWork.total > 99 ? '99+' : pendingWork.total}</em> : null) : <small>{(governance?.metrics.open ?? 0) || ''}</small>}</button>
+          {user.role === 'admin' && <button className={page === 'members' ? 'active' : ''} onClick={() => { setPage('members'); setMobileNav(false); }}><Users size={17} /><span>用户管理</span></button>}
           <button className={page === 'usage' ? 'active' : ''} onClick={() => { setPage('usage'); setMobileNav(false); }}><Gauge size={17} /><span>用量</span></button>
           <button className={page === 'settings' ? 'active' : ''} onClick={() => { setPage('settings'); setMobileNav(false); }}><Settings2 size={17} /><span>设置</span></button>
         </nav>
@@ -695,13 +983,28 @@ function App() {
 
         {page === 'chat' && session && <div className="chat-layout">
           <section className="conversation-column">
+            <div className="conversation-reading-area">
             <div className="conversation-scroll" ref={scrollRef}
               onScroll={(event) => {
                 const node = event.currentTarget;
                 autoFollow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 120;
               }}>
               {session.messages?.length ? <div className="message-stack">
-                  {session.messages.map((message) => <ChatMessage key={message.id} message={message} user={user} sessionId={session.id} busy={busy} onOpenGroup={openLearnedGroup} onCopy={() => { void navigator.clipboard.writeText(message.content); notify('已复制回答'); }} onReport={() => { setReportTarget(message); setReportCategory('mismatch'); setReportNote(''); }} onRetry={() => void send(message.meta?.query ?? '', false, undefined, Boolean(message.meta?.web_search), message.meta?.document_id, message.meta?.image_id, Boolean(message.meta?.knowledge), message.meta?.requested_model ?? '')} onReask={() => void send(message.meta?.query ?? '', true, message.meta?.reask_of ?? (message.meta?.group_id && message.meta?.version_id ? { group_id: message.meta.group_id, version_id: message.meta.version_id } : undefined), false, undefined, undefined, false, selectedModel === '@local' ? '' : selectedModel)} onVariant={async (style) => {
+                  {session.messages.map((message) => <ChatMessage key={message.id} message={message} user={user} sessionId={session.id} busy={busy} isLastAssistant={message.id === lastAssistantId} onOpenGroup={openLearnedGroup} onCopy={() => { void navigator.clipboard.writeText(message.content); notify('已复制回答'); }} onExtract={() => extractQuestion(message)} onReport={() => { setReportTarget(message); setReportCategory('mismatch'); setReportNote(''); }} onRetry={() => {
+                    const meta = message.meta;
+                    const provider = meta?.search_provider_id ?? settings?.search_providers?.find((option) => option.label === meta?.search_provider)?.id;
+                    void send(meta?.query ?? '', false, undefined, Boolean(meta?.web_search), meta?.document_id, meta?.image_id,
+                      Boolean(meta?.knowledge), meta?.requested_model ?? '', provider, meta?.regenerate_of);
+                  }} onRegenerate={() => {
+                    const meta = message.meta;
+                    // 重新回答跟随聊天框当前的选择：回答模型与网页搜索开关，而不是上一条回答当时的参数。
+                    const search = webSearch;
+                    const model = selectedModel;
+                    void send(meta?.query ?? '', model !== '@none', undefined, search,
+                      search ? undefined : meta?.document_id, search ? undefined : meta?.image_id,
+                      search ? false : Boolean(meta?.knowledge), model,
+                      search ? selectedSearchProvider : meta?.search_provider_id, message.id);
+                  }} onReask={() => void send(message.meta?.query ?? '', true, message.meta?.reask_of ?? (message.meta?.group_id && message.meta?.version_id ? { group_id: message.meta.group_id, version_id: message.meta.version_id } : undefined), false, undefined, undefined, false, selectedModel === '@local' ? '' : selectedModel)} onVariant={async (style) => {
                   try {
                     const result = await api<{ message: Message; cloud_calls: number }>(`/api/sessions/${session.id}/messages/${message.id}/variant`, { method: 'POST', body: JSON.stringify({ style }) });
                     setSession((current) => current?.id === session.id ? {
@@ -734,6 +1037,9 @@ function App() {
                   {starters.map((item) => <button key={item.text} onClick={() => void send(item.text)}><span className="starter-tag">{item.tag}</span><span>{item.text}</span><ChevronRight size={15} /></button>)}
                 </div>
               </div>}
+            </div>
+              {conversationTurns.length > 1 && <ConversationNavigator key={session.id} turns={conversationTurns}
+                scrollRef={scrollRef} onJump={() => { autoFollow.current = false; }} />}
             </div>
             <form className="composer" onSubmit={submit}>
               {(!!session.documents?.length || !!session.images?.length) && <div className="document-picker">
@@ -777,14 +1083,14 @@ function App() {
                       inputRef.current?.focus();
                     }}
                     onError={setError} />
-                  <label title={activeFile ? '取消选择附件后可搜索网页' : '将本次问题发给' + (settings?.search_provider ?? '搜索服务') + '以获取来源'}
+                  <label title={activeFile ? '取消选择附件后可搜索网页' : '将本次问题发给所选搜索引擎'}
                     className={`search-toggle ${webSearch ? 'active' : ''}`}>
                     <input type="checkbox" checked={webSearch} disabled={Boolean(activeFile) || uploading}
                       onChange={(event) => {
                         setWebSearch(event.target.checked);
                         if (event.target.checked) {
                           setUseKnowledge(false);
-                          if (selectedModel === '@local') setSelectedModel('');
+                          if (selectedModel === '@local' || selectedModel === '@none') setSelectedModel('');
                         }
                       }} />网页搜索
                   </label>
@@ -795,7 +1101,8 @@ function App() {
                         if (event.target.checked) setWebSearch(false);
                       }} />共享资料
                   </label>}
-                  {(settings?.cloud_online || settings?.local_model) && <select className="composer-model" aria-label="回答模型"
+                  {(settings?.cloud_online || settings?.local_model) && <label className="search-toggle">回答模型
+                    <select className="composer-model" aria-label="回答模型"
                     value={activeImage ? '' : selectedModel} disabled={busy || Boolean(activeImage)}
                     onChange={(event) => {
                       const value = event.target.value;
@@ -806,10 +1113,27 @@ function App() {
                     <option value="@none">不用模型 · 只查问答库</option>
                     {(settings.models ?? []).filter((model) => model.enabled && model.available && model.kind !== 'vision')
                       .map((model) => <option key={model.id} value={model.id} disabled={model.kind === 'local' && webSearch}>{model.label}</option>)}
-                  </select>}
+                    </select>
+                  </label>}
                 </div>
                 <span><kbd>Enter</kbd> 发送 · <kbd>Shift Enter</kbd> 换行</span>
                 <button className="send-button" type="submit" disabled={!input.trim() || busy || uploading} aria-label="发送"><Send size={17} /></button>
+              </div>
+              <div className="composer-search-engines" role="group" aria-label="搜索引擎">
+                <span>搜索引擎</span>
+                {(settings?.search_providers ?? searchOptions).map((option) => (
+                  <button key={option.id} type="button" aria-pressed={webSearch && selectedSearchProvider === option.id}
+                    disabled={busy || uploading || Boolean(activeFile)}
+                    title={option.configured === false ? '站内未配置' : undefined}
+                    onClick={() => {
+                      setSearchProviderChoice(option.id);
+                      setWebSearch(true);
+                      setUseKnowledge(false);
+                      if (selectedModel === '@local' || selectedModel === '@none') setSelectedModel('');
+                    }}>
+                    {option.label}{option.configured === false ? '（未配置）' : ''}
+                  </button>
+                ))}
               </div>
             </form>
           </section>
@@ -831,6 +1155,7 @@ function App() {
           </aside>}
         </div>}
 
+        <WorkBench key={user.id} api={api} hidden={page !== 'work'} />
         {page === 'methods' && <ReusableMethods api={api} />}
 
         {page === 'knowledge' && settings?.shared_member && <KnowledgeLibrary api={api} onAsk={() => {
@@ -841,41 +1166,116 @@ function App() {
         }} />}
 
         {page === 'library' && <section className="page-content library-page">
-          <div className="page-heading"><div><span className="eyebrow">可复用知识</span><h1>问答库</h1><p>管理原问、等价问法和已发布答案。</p></div><div className="page-heading-actions"><span className="count-label"><Database size={15} />{groups.length >= groupLimit ? `已显示 ${groups.length} 个问题组` : `${groups.length} 个问题组`}</span></div></div>
+          <div className="page-heading"><div><span className="eyebrow">可复用知识</span><h1>问答库</h1><p>管理原问、等价问法和已发布答案。</p></div><div className="page-heading-actions"><span className="count-label"><Database size={15} />共 {groupTotal} 个问题组</span></div></div>
           <div className="toolbar-row">
-            <div className="search-field"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void refreshGroupList(); }} placeholder="搜索问题或意图" /><kbd>↵</kbd></div>
-            <div className="segmented-control" aria-label="筛选问答库"><button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>全部</button><button className={filter === 'mine' ? 'active' : ''} onClick={() => setFilter('mine')}>个人</button><button className={filter === 'shared' ? 'active' : ''} onClick={() => setFilter('shared')}>共享</button><button className={filter === 'disabled' ? 'active' : ''} onClick={() => setFilter('disabled')}>停用</button></div>
+            <div className="search-field"><Search size={16} /><input value={search} maxLength={400}
+              onChange={(event) => { setSearch(event.target.value); setGroupPage(1); }} placeholder="搜索问题或意图" /></div>
+            <div className="segmented-control" aria-label="筛选问答库">
+              {Object.entries({ all: '全部', mine: '个人', shared: '共享', disabled: '停用' }).map(([value, label]) =>
+                <button key={value} className={filter === value ? 'active' : ''}
+                  onClick={() => { setFilter(value); setGroupPage(1); }}>{label}</button>)}
+            </div>
           </div>
+          {filter === 'mine' && settings?.shared_member && <div className="group-share-toolbar">
+            <span>已选 {shareSelection.size} 条</span>
+            <button type="button" className="outline-button" disabled={!shareSelection.size || sharing}
+              onClick={() => setShareSelection(new Set())}>清空选择</button>
+            <button type="button" className="primary-button" disabled={!shareSelection.size || sharing}
+              onClick={() => void submitShared()}>{sharing ? '正在提交…' : '提交共享审核'}</button>
+          </div>}
           {pageBusy ? <LoadingLine /> : <div className="library-grid">
             <div className="group-list">
-              {groups.map((group) => <button key={group.id} className={`group-row ${selectedGroup?.id === group.id ? 'active' : ''}`} onClick={() => void openGroup(group)}>
-                <span className="group-icon"><FileText size={16} /></span><span className="group-main"><strong>{group.original}</strong><small>{group.intent}</small><span className="group-tags"><em className={group.scope === 'shared' ? 'tag-shared' : 'tag-personal'}>{group.scope === 'shared' ? '共享库' : '个人库'}</em><em>{group.alias_count} 条问法</em><em>{group.hits} 次命中</em></span></span><span className={`state-label state-label--${group.status}`}>{group.status === 'active' ? '启用中' : '已停用'}</span><ChevronRight size={16} className="row-chevron" />
-              </button>)}
+              {groups.map((group) => <div className="group-list-entry" key={group.id}>
+                {filter === 'mine' && settings?.shared_member && <input type="checkbox"
+                  aria-label={'选择问答：' + group.original} checked={shareSelection.has(group.id)}
+                  disabled={sharing || group.status !== 'active' || group.share_status === 'pending' ||
+                    group.share_status === 'approved' || (shareSelection.size >= 200 && !shareSelection.has(group.id))}
+                  onChange={(event) => {
+                    const checked = event.currentTarget.checked;
+                    setShareSelection((current) => {
+                      const next = new Set(current);
+                      if (checked) next.add(group.id); else next.delete(group.id);
+                      return next;
+                    });
+                  }} />}
+                <button className={`group-row ${selectedGroup?.id === group.id ? 'active' : ''}`} onClick={() => void openGroup(group)}>
+                  <span className="group-icon"><FileText size={16} /></span><span className="group-main"><strong>{group.original}</strong><small>{group.intent}</small><span className="group-tags"><em className={group.scope === 'shared' ? 'tag-shared' : 'tag-personal'}>{group.scope === 'shared' ? '共享库' : '个人库'}</em><em>{group.alias_count} 条问法</em><em>{group.hits} 次命中</em>{group.share_status && <em>{({ pending: '待共享审核', approved: '已共享', rejected: '共享已驳回' })[group.share_status]}</em>}</span></span><span className={`state-label state-label--${group.status}`}>{group.status === 'active' ? '启用中' : '已停用'}</span><ChevronRight size={16} className="row-chevron" />
+                </button>
+              </div>)}
               {!groups.length && <div className="empty-state"><BookOpen size={22} /><strong>没有找到问答记录</strong><span>完整回答并开启学习后，合格问答会出现在这里。</span></div>}
-              {groups.length >= groupLimit && <div className="group-list-more"><button className="outline-button" onClick={() => setGroupLimit((value) => value + 200)}>加载更多</button></div>}
+              <div className="group-list-more group-pagination">
+                <label>每页 <select aria-label="每页数量" value={groupSize}
+                  onChange={(event) => { setGroupSize(Number(event.target.value)); setGroupPage(1); }}>
+                  {[10, 25, 50, 100, 200].map((size) => <option key={size} value={size}>{size} 条</option>)}
+                </select></label>
+                <button className="outline-button" disabled={groupPage <= 1} onClick={() => setGroupPage(groupPage - 1)}>上一页</button>
+                <span aria-live="polite">第 {groupPage} / {groupPages} 页</span>
+                <button className="outline-button" disabled={groupPage >= groupPages} onClick={() => setGroupPage(groupPage + 1)}>下一页</button>
+              </div>
             </div>
             <div className="detail-pane">
-              {selectedGroup ? <GroupDetail group={selectedGroup} onToggle={() => void changeGroupState(selectedGroup, selectedGroup.status === 'active' ? 'disabled' : 'active')} onPublish={async (answer) => {
-                try { await api(`/api/groups/${selectedGroup.id}/versions`, { method: 'POST', body: JSON.stringify({ answer, basis: '问答库编辑' }) }); setSelectedGroup(await api<Group>(`/api/groups/${selectedGroup.id}`)); await refreshGroupList(); notify('已发布新版本'); }
-                catch (cause) { notify(cause instanceof Error ? cause.message : '发布失败'); }
+              {selectedGroup ? <GroupDetail key={selectedGroup.id} group={selectedGroup} onToggle={() => void changeGroupState(selectedGroup, selectedGroup.status === 'active' ? 'disabled' : 'active')} onRefresh={async () => setSelectedGroup(await api<Group>(`/api/groups/${selectedGroup.id}`))} onPublish={async (answer) => {
+                try { await api(`/api/groups/${selectedGroup.id}/versions`, { method: 'POST', body: JSON.stringify({ answer, basis: '问答库编辑', base_version_id: selectedGroup.current_version_id }) }); setSelectedGroup(await api<Group>(`/api/groups/${selectedGroup.id}`)); await refreshGroupList(); notify('已发布新版本'); return true; }
+                catch (cause) { notify(cause instanceof Error ? cause.message : '发布失败'); return false; }
               }} /> : <div className="detail-placeholder"><BookOpen size={20} /><span>选择一个问题组查看答案版本与等价问法</span></div>}
             </div>
           </div>}
         </section>}
 
         {page === 'governance' && <section className="page-content">
-          <div className="page-heading"><div><span className="eyebrow">反馈与质量</span><h1>审核与治理</h1><p>核查用户反馈、暂停对象与共享库修订建议。</p></div><span className="role-note"><ShieldCheck size={15} />{user.role === 'admin' ? '共享库管理员' : '成员 · 只读处理'}</span></div>
+          <div className="page-heading"><div><span className="eyebrow">反馈与质量</span><h1>审核与治理</h1><p>核查用户反馈、管理共享问答和处理修订建议。</p></div><span className="role-note"><ShieldCheck size={15} />{governance?.can_manage_shared ? '共享库管理员' : '成员'}</span></div>
           <div className="metric-strip"><Metric label="待处理反馈" value={governance?.metrics.open ?? 0} icon={<Flag size={17} />} /><Metric label="暂停对象" value={governance?.metrics.suspended ?? 0} icon={<Archive size={17} />} /><Metric label="修订建议" value={governance?.metrics.pending_revisions ?? 0} icon={<FileText size={17} />} /><Metric label="观察窗口" value={settings ? `${settings.pause_window_days} 天` : '—'} icon={<History size={17} />} /></div>
+          {governance?.can_manage_shared && <GovernanceEntries selectedId={governanceEntryId} onSelect={setGovernanceEntryId}
+            onSaved={async () => setGovernance(await api<Governance>('/api/governance'))} />}
+          {governance?.can_manage_shared && <SharedSubmissionQueue entries={governance.shared_submissions}
+            onResolved={async () => setGovernance(await api<Governance>('/api/governance'))} />}
           {pageBusy ? <LoadingLine /> : <div className="governance-columns">
-            <div className="data-section"><div className="data-section-head"><div><h2>反馈队列</h2><p>事实错误与错配反馈会为报告者绕开结果。</p></div><span className="quiet-count">{governance?.reports.length ?? 0}</span></div>
-              {governance?.reports.length ? governance.reports.map((report) => <article className="governance-row" key={report.id}><div className="report-mark"><ThumbsDown size={15} /></div><div className="row-copy"><strong>{report.original}</strong><p><span className={`feedback-type feedback-type--${report.category}`}>{({ fact: '事实有误', mismatch: '答非所问', style: '表达反馈' } as Record<string, string>)[report.category] ?? report.category}</span>{report.note || '未填写补充说明'}</p><small>{report.reporter} · {fmtDate(report.created_at)}</small>{report.answer && <details><summary>查看所报告的答复</summary><div className="revision-preview"><ReactMarkdown remarkPlugins={[remarkGfm]}>{report.answer}</ReactMarkdown></div></details>}</div><span className="state-label">{report.status === 'open' ? '待核查' : report.status === 'recorded' ? '已记录' : '已处理'}</span></article>) : <InlineEmpty text="暂时没有反馈" />}
+            <div className="data-section"><div className="data-section-head"><div><h2>反馈队列</h2><p>事实错误与错配反馈会为报告者绕开结果。</p></div><div className="data-section-tools">{governance?.can_manage_shared && <button className="small-button small-button--accent" onClick={() => void autoReviewReports()} disabled={autoReviewing}>{autoReviewing ? '审核中…' : '大模型一键审核'}</button>}<span className="quiet-count">{openReports.length}</span></div></div>
+              {openReports.length ? openReports.map((report) => <article className="governance-row" key={report.id}><div className="report-mark"><ThumbsDown size={15} /></div><div className="row-copy"><strong>{report.original}</strong><p><span className={`feedback-type feedback-type--${report.category}`}>{({ fact: '事实有误', mismatch: '答非所问', style: '表达反馈' } as Record<string, string>)[report.category] ?? report.category}</span>{report.note || '未填写补充说明'}</p><small>{report.reporter} · {fmtDate(report.created_at)}</small>{report.answer && <details><summary>查看所报告的答复</summary><div className="revision-preview"><ReactMarkdown remarkPlugins={[remarkGfm]}>{report.answer}</ReactMarkdown></div></details>}{report.reply && <p className="governance-reply">处理说明：{report.reply}</p>}</div><div className="row-actions">
+                <span className="state-label">{report.status === 'open' ? '待核查' : report.resolution === 'fixed' ? '已修正' : report.resolution === 'kept' ? '不修正' : '已处理'}</span>
+                {report.can_resolve && report.status === 'open' && <button className="small-button small-button--accent" onClick={() => openResolveReport(report)}>已解决</button>}
+                {governance?.can_manage_shared && report.scope === 'shared' && report.group_id && <button className="small-button" onClick={() => setGovernanceEntryId(report.group_id)}>查看条目</button>}
+              </div></article>) : <InlineEmpty text="暂时没有待处理反馈" />}
+              {resolvedReports.length > 0 && <details className="resolved-reports"><summary>已处理 {resolvedReports.length} 条</summary>{resolvedReports.map((report) => <article className="governance-row governance-row--resolved" key={report.id}><div className="row-copy"><strong>{report.original}</strong><p><span className={`feedback-type feedback-type--${report.category}`}>{({ fact: '事实有误', mismatch: '答非所问', style: '表达反馈' } as Record<string, string>)[report.category] ?? report.category}</span>{report.note || '未填写补充说明'}</p><small>{report.reporter} · {fmtDate(report.created_at)} · {report.resolution === 'fixed' ? '已修正' : '不修正'}</small>{report.reply && <p className="governance-reply">处理说明：{report.reply}</p>}</div></article>)}</details>}
             </div>
             <div className="data-section"><div className="data-section-head"><div><h2>暂停与修订</h2><p>修正答案会创建新版本，旧版本保留记录。</p></div><span className="quiet-count">{(governance?.suspensions.length ?? 0) + (governance?.revisions.length ?? 0)}</span></div>
-              {governance?.suspensions.filter((item) => item.status === 'active').map((item) => <article className="governance-row" key={item.id}><div className="report-mark report-mark--warn"><LockKeyhole size={15} /></div><div className="row-copy"><strong>{item.original}</strong><p>{item.reason}</p><small>{item.kind === 'version' ? '答案版本暂停' : '问法匹配暂停'}</small></div>{item.can_manage && <div className="row-actions"><button className="small-button" onClick={() => void resolveSuspension(item.id, 'restored')}>恢复</button><button className="small-button small-button--accent" onClick={() => void resolveSuspension(item.id, 'disabled')}>停用</button></div>}</article>)}
-              {governance?.revisions.filter((item) => item.status === 'pending').map((item) => <article className="governance-row revision-row" key={item.id}><div className="report-mark"><FileText size={15} /></div><div className="row-copy"><strong>{item.original}</strong><p>{item.note || '成员提交了答案修订建议'}</p><small>{item.proposer}</small><details><summary>查看建议答案</summary><div className="revision-preview"><ReactMarkdown remarkPlugins={[remarkGfm]}>{item.proposed_answer}</ReactMarkdown></div></details></div>{item.can_manage && <div className="row-actions"><button className="small-button small-button--accent" onClick={() => void resolveRevision(item.id, 'publish')}>发布修正</button><button className="small-button" onClick={() => void resolveRevision(item.id, 'kept')}>保留原版</button></div>}</article>)}
+              {governance?.suspensions.filter((item) => item.status === 'active').map((item) => <article className="governance-row" key={item.id}><div className="report-mark report-mark--warn"><LockKeyhole size={15} /></div><div className="row-copy"><strong>{item.original}</strong><p>{item.reason}</p><small>{item.kind === 'version' ? '答案版本暂停' : '问法匹配暂停'}</small></div>{item.can_manage && <div className="row-actions">
+                {item.scope === 'shared' && <button className="small-button" onClick={() => setGovernanceEntryId(item.group_id)}>查看条目</button>}
+                <button className="small-button" onClick={() => void resolveSuspension(item.id, 'restored')}>恢复</button><button className="small-button small-button--accent" onClick={() => void resolveSuspension(item.id, 'disabled')}>停用</button>
+              </div>}</article>)}
+              {governance?.revisions.filter((item) => item.status === 'pending').map((item) => <article className="governance-row revision-row" key={item.id}>
+                <div className="report-mark"><FileText size={15} /></div>
+                <div className="row-copy"><strong>{item.original}</strong><p>{item.note || '成员提交了答案修订建议'}</p><small>{item.proposer}</small>
+                  <details><summary>查看建议答案</summary><div className="revision-preview"><ReactMarkdown remarkPlugins={[remarkGfm]}>{item.proposed_answer}</ReactMarkdown></div></details>
+                  {item.scope === 'shared' && item.can_manage && <SharedAiReview endpoint={'/api/revisions/' + encodeURIComponent(item.id) + '/ai-review'} />}
+                </div>
+                {item.can_manage && <div className="row-actions">
+                  {item.scope === 'shared' && <button className="small-button" onClick={() => setGovernanceEntryId(item.group_id)}>查看条目</button>}
+                  <button className="small-button small-button--accent" onClick={() => void resolveRevision(item.id, 'publish')}>发布修正</button>
+                  <button className="small-button" onClick={() => void resolveRevision(item.id, 'kept')}>保留原版</button>
+                </div>}
+              </article>)}
               {!governance?.suspensions.some((item) => item.status === 'active') && !governance?.revisions.some((item) => item.status === 'pending') && <InlineEmpty text="没有待处理的暂停或修订" />}
             </div>
           </div>}
+          {governance?.can_manage_shared && <div className="data-section alias-suggestion-section"><div className="data-section-head"><div><h2>问法建议</h2><p>成员在问答库条目详情里提交的等价问法；采纳后立即参与匹配，结果会发给建议者。</p></div><span className="quiet-count">{governance.alias_suggestions?.length ?? 0}</span></div>
+            {governance.alias_suggestions?.length ? governance.alias_suggestions.map((suggestion) => <article className="governance-row" key={suggestion.id}><div className="report-mark"><ArrowLeftRight size={15} /></div><div className="row-copy"><strong>{suggestion.original}</strong><p>建议问法：{suggestion.text}{suggestion.note ? ` · ${suggestion.note}` : ''}</p><small>{suggestion.suggester} · {fmtDate(suggestion.created_at)}</small></div><div className="row-actions">
+              <button className="small-button" onClick={() => setGovernanceEntryId(suggestion.group_id)}>查看条目</button>
+              <button className="small-button small-button--accent" onClick={() => void resolveAliasSuggestion(suggestion.id, 'adopt')}>采纳</button>
+              <button className="small-button" onClick={() => void resolveAliasSuggestion(suggestion.id, 'reject')}>不采纳</button>
+            </div></article>) : <InlineEmpty text="暂时没有待处理的问法建议" />}
+            {governance.alias_suggestion_history?.length ? <details className="resolved-reports"><summary>已处理 {governance.alias_suggestion_history.length} 条</summary>{governance.alias_suggestion_history.map((item) => <article className="governance-row governance-row--resolved" key={item.id}><div className="row-copy"><strong>{item.original}</strong><p>建议问法：{item.text}{item.note ? ` · ${item.note}` : ''}</p><small>{item.suggester} · {fmtDate(item.handled_at ?? item.created_at)} · {item.status === 'adopted' ? '已采纳' : '已拒绝'}{item.handler ? ` · ${item.handler}` : ''}</small>{item.reply && <p className="governance-reply">处理说明：{item.reply}</p>}</div></article>)}</details> : null}
+          </div>}
+        </section>}
+
+        {page === 'members' && <section className="page-content">
+          <div className="page-heading"><div><span className="eyebrow">账号与权限</span><h1>用户管理</h1><p>调整成员角色、冻结账号和每日云端额度。</p></div><span className="role-note"><UserCog size={15} />管理员</span></div>
+          <div className="data-section">
+            <div className="data-section-head"><div><h2>成员</h2><p>管理员拥有全部权限；审核拥有全部审核权限但不能管理用户；普通用户只能使用问答。冻结后立即退出登录且无法再登录。</p></div><span className="quiet-count">{memberQuotas?.members.length ?? 0}</span></div>
+            {memberQuotas ? memberQuotas.members.map((member) => <MemberRow key={member.id} member={member}
+              defaultLimit={memberQuotas.default_limit} canEditSelf={member.id === user?.id}
+              onSaved={setMemberQuotas} notify={notify} />) : <LoadingLine />}
+          </div>
         </section>}
 
         {page === 'usage' && <section className="page-content">
@@ -892,11 +1292,40 @@ function App() {
               <Metric label="云端回答" value={usage.answer_calls} icon={<Cloud size={17} />} />
               <Metric label="后台改写" value={usage.learn_calls} foot={`会话摘要 ${usage.summary_calls ?? 0} 次`} icon={<Sparkles size={17} />} />
               <Metric label="总估算成本" value={usage.cost_configured ? `$${usage.cost.toFixed(4)}` : '未设置单价'}
-                foot={usage.cost_configured && usage.cost_per_100 !== null ? `每百次请求约 $${usage.cost_per_100.toFixed(4)}` : undefined} icon={<Gauge size={17} />} />
+                foot={usage.cost_configured && usage.cost_per_100 !== null ? `常规请求每百次约 $${usage.cost_per_100.toFixed(4)}` : undefined} icon={<Gauge size={17} />} />
               <Metric label="总耗时中位" value={`${usage.median_total_ms} ms`} icon={<History size={17} />} />
             </div>
-            <div className="usage-layout"><div className="data-section path-section"><div className="data-section-head"><div><h2>请求路径</h2><p>按最近 30 天的请求记录统计。</p></div></div>{Object.keys(usage.paths).length ? Object.entries(usage.paths).sort((a, b) => b[1] - a[1]).map(([path, count]) => <div className="bar-row" key={path}><span>{({ exact: '原问命中', alias: '等价问法', semantic: '意图匹配', tool: '本地工具', method: '复用方法', local_model: '本地模型', cloud: '云端回答', search: '网页搜索', document: '文件问答', image: '图片理解', knowledge: '共享资料', learn: '后台改写', clarify: '澄清问题', revision: '发布修订' } as Record<string, string>)[path] ?? path}</span><div className="bar-track"><i style={{ width: `${Math.max(3, count / Math.max(...Object.values(usage.paths)) * 100)}%` }} /></div><strong>{count}</strong></div>) : <InlineEmpty text="还没有请求记录" />}</div>
-              <div className="data-section cost-section"><div className="data-section-head"><div><h2>请求日志</h2><p>路径、调用次数与完成时间。</p></div><span className="quiet-count">{usage.requests.length}</span></div><div className="table-wrap"><table><thead><tr><th>时间</th><th>请求</th><th>路径</th><th>云端</th><th>耗时</th></tr></thead><tbody>{usage.requests.map((row, index) => <tr key={`${row.at}-${index}`}><td>{fmtDate(row.at)}</td><td className="query-cell">{row.query}</td><td><span className={`path-pill path-pill--${row.path}`}>{({ exact: '原问', alias: '改写', semantic: '意图', tool: '工具', method: '复用方法', local_model: '本地模型', cloud: '云端', search: '网页搜索', document: '文件问答', image: '图片理解', knowledge: '共享资料', learn: '改写', summary: '会话摘要' } as Record<string, string>)[row.path] ?? row.path}</span></td><td>{row.cloud_calls}</td><td>{row.total_ms} ms</td></tr>)}</tbody></table>{!usage.requests.length && <InlineEmpty text="暂无用量数据" />}</div></div>
+            <section className="data-section">
+              <div className="data-section-head"><h2>Work 任务用量</h2></div>
+              <div className="metric-strip">
+                <Metric label="任务完成" value={`${usage.work.completed}/${usage.work.total}`} icon={<ListChecks size={17} />} />
+                <Metric label="零云端调用且完成" value={usage.work.zero_cloud} icon={<Check size={17} />} />
+                <Metric label="云端调用次数" value={usage.work.cloud_calls} foot={`平均每次任务 ${usage.work.average_cloud_calls} 次`} icon={<Cloud size={17} />} />
+              </div>
+            </section>
+            <div className="usage-layout">
+              <div className="data-section path-section">
+                <div className="data-section-head"><div><h2>请求路径</h2><p>按最近 30 天的请求记录统计。</p></div></div>
+                {Object.keys(usage.paths).length ? Object.entries(usage.paths).sort((a, b) => b[1] - a[1]).map(([path, count]) =>
+                  <div className="bar-row" key={path}>
+                    <span>{usagePathNames[path] ?? path}</span>
+                    <div className="bar-track"><i style={{ width: `${Math.max(3, count / Math.max(...Object.values(usage.paths)) * 100)}%` }} /></div>
+                    <strong>{count}</strong>
+                  </div>) : <InlineEmpty text="还没有请求记录" />}
+              </div>
+              <div className="data-section cost-section">
+                <div className="data-section-head"><div><h2>请求日志</h2><p>路径、状态、调用次数与耗时。</p></div><span className="quiet-count">{usage.requests.length}</span></div>
+                <div className="table-wrap">
+                  <table><thead><tr><th>时间</th><th>请求</th><th>路径</th><th>状态</th><th>云端</th><th>耗时</th></tr></thead>
+                    <tbody>{usage.requests.map((row, index) => <tr key={`${row.at}-${index}`}>
+                      <td>{fmtDate(row.at)}</td><td className="query-cell">{row.query}</td>
+                      <td><span className={`path-pill path-pill--${row.path}`}>{usagePathNames[row.path] ?? row.path}</span></td>
+                      <td>{row.ok ? '已完成' : '未完成'}</td><td>{row.cloud_calls}</td><td>{row.total_ms} ms</td>
+                    </tr>)}</tbody>
+                  </table>
+                  {!usage.requests.length && <InlineEmpty text="暂无用量数据" />}
+                </div>
+              </div>
             </div>
           </>}
         </section>}
@@ -922,12 +1351,34 @@ function App() {
                   ))}</span>
                 </div>
               </SettingsSection>
-              {user.role === 'admin' && <SettingsSection icon={<ShieldCheck size={17} />} title="成员额度" description="每人每天的云端调用上限，按账号生效；留空跟随服务端默认值，填 0 表示不限。">
-                {memberQuotas ? <>
-                  <div className="setting-row"><span><strong>默认额度</strong><small>没有单独设置的账号使用这个上限；全站额度 {memberQuotas.site_limit ? `${memberQuotas.site_limit} 次/天` : '不限'}。</small></span><span className="status-pill"><span />{memberQuotas.default_limit ? `${memberQuotas.default_limit} 次/天` : '不限'}</span></div>
-                  {memberQuotas.members.map((member) => <MemberQuotaRow key={member.id} member={member} defaultLimit={memberQuotas.default_limit} onSaved={setMemberQuotas} notify={notify} />)}
-                </> : <LoadingLine />}
-              </SettingsSection>}
+              <SettingsSection icon={<Plug size={17} />} title="模型接口" description="GPT / Claude / Gemini / GLM / Kimi 等 OpenAI 兼容接口。API Key、地址和模型名只保存在本机数据库，不上传。">
+                {providers?.providers.length ? <div className="provider-list">
+                  {providers.providers.map((item) => <div className="provider-row" key={item.id}>
+                    <span className="provider-copy"><strong>{item.label}</strong><small>{item.model} · {item.base_url} · Key {item.has_key ? item.key_hint : '未填写'}</small></span>
+                    <span className="provider-actions">
+                      <button className="small-button" type="button" disabled={providerBusy} onClick={() => void testProvider(item.id)}>测试</button>
+                      <button className="small-button" type="button" disabled={providerBusy} onClick={() => void removeProvider(item.id)}>删除</button>
+                    </span>
+                  </div>)}
+                </div> : <p className="muted-text">还没有自定义接口。下面选一个预设，填模型名和 Key 即可。</p>}
+                <form className="provider-form" onSubmit={(event) => { event.preventDefault(); void addProvider(); }}>
+                  <select aria-label="接口类型" value={providerPreset} onChange={(event) => {
+                    const id = event.target.value;
+                    setProviderPreset(id);
+                    const preset = providers?.presets.find((item) => item.id === id);
+                    setProviderBaseUrl(preset?.base_url ?? '');
+                  }}>
+                    {(providers?.presets ?? []).map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+                  </select>
+                  <input aria-label="模型名" placeholder="模型名，如 gpt-4o / claude-sonnet-4-5 / kimi-k2" value={providerModel}
+                    onChange={(event) => setProviderModel(event.target.value)} />
+                  <input aria-label="接口地址" placeholder="Base URL" value={providerBaseUrl}
+                    onChange={(event) => setProviderBaseUrl(event.target.value)} />
+                  <input aria-label="API Key" type="password" autoComplete="off" placeholder="API Key（只存本机）" value={providerKey}
+                    onChange={(event) => setProviderKey(event.target.value)} />
+                  <button className="small-button small-button--accent" type="submit" disabled={providerBusy || !providerModel.trim() || !providerBaseUrl.trim()}>添加</button>
+                </form>
+              </SettingsSection>
               <SettingsSection icon={<Cloud size={17} />} title="回答模型" description="自动选择会按下面的顺序使用第一个已启用的模型；停用的模型不参与自动选择，也不出现在聊天选择框里。">
                 {(settings.models ?? []).length > 0 ? (settings.models ?? []).map((model) => (
                   <label className="setting-row" key={model.id}>
@@ -960,17 +1411,41 @@ function App() {
       </main>
 
       {toast && <div className="toast" role="status"><Check size={15} />{toast}</div>}
+      {showChatImport && <ChatImport api={api} onClose={() => setShowChatImport(false)}
+        onImported={(id, count) => void openImportedChat(id, count)} />}
+      {questionDraft && <SaveConversationQuestion api={api} sessionId={questionDraft.sessionId} messageId={questionDraft.messageId}
+        initialQuestion={questionDraft.question} initialAnswer={questionDraft.answer} onClose={() => setQuestionDraft(undefined)}
+        onSaved={(id) => { setQuestionDraft(undefined); notify('已加入个人问答库'); void openLearnedGroup(id); }} />}
+      {resolveTarget && <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setResolveTarget(null); }}>
+        <form className="report-modal" onSubmit={submitResolveReport}>
+          <div className="modal-head"><div><span className="eyebrow">处理反馈</span><h2>标记已解决</h2></div><button type="button" className="icon-button" onClick={() => setResolveTarget(null)} aria-label="关闭"><X size={17} /></button></div>
+          <p className="modal-target">{resolveTarget.original}</p>
+          <label className="field-label">处理方式<select value={resolveMode} onChange={(event) => setResolveMode(event.target.value as 'fixed' | 'kept')}><option value="fixed">已修正答案</option><option value="kept">不修正</option></select></label>
+          {resolveMode === 'fixed' ? <>
+            <label className="field-label">修正后的答案<textarea value={resolveAnswer} onChange={(event) => setResolveAnswer(event.target.value)} rows={4} placeholder="会发布为新版本，并发送给反馈者" /></label>
+            <label className="field-label">补充说明（可选）<textarea value={resolveReply} onChange={(event) => setResolveReply(event.target.value)} rows={2} placeholder="给反馈者的说明" /></label>
+          </> : <label className="field-label">不修正的原因（选填）<textarea value={resolveReply} onChange={(event) => setResolveReply(event.target.value)} rows={3} placeholder="不填默认发送「经核对，当前答案没有问题」" /></label>}
+          <p className="muted-text">提交后会标记为已解决，并把结果作为一条通知发进反馈者的会话。</p>
+          <div className="modal-verify">
+            <button type="button" className="outline-button" onClick={() => void verifyWithModel()} disabled={verifying}>{verifying ? <><LoaderCircle size={14} className="spin" />正在验证…</> : '让大模型验证'}</button>
+            {verifyAdvice && <p className="modal-advice">大模型意见：{verifyAdvice}</p>}
+          </div>
+          <div className="modal-actions"><button className="outline-button" type="button" onClick={() => setResolveTarget(null)}>取消</button><button className="primary-button" type="submit">发送并标记已解决</button></div>
+        </form>
+      </div>}
       {reportTarget && <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setReportTarget(null); }}><form className="report-modal" onSubmit={(event) => { event.preventDefault(); void report(); }}><div className="modal-head"><div><span className="eyebrow">回答反馈</span><h2>报告问题</h2></div><button type="button" className="icon-button" onClick={() => setReportTarget(null)} aria-label="关闭"><X size={17} /></button></div><p className="modal-target">{reportTarget.content.slice(0, 200)}</p><label className="field-label">反馈类型<select value={reportCategory} onChange={(event) => setReportCategory(event.target.value)}><option value="mismatch">答非所问</option><option value="fact">事实有误</option><option value="style">表达不合适</option></select></label><label className="field-label">补充说明<textarea value={reportNote} onChange={(event) => setReportNote(event.target.value)} placeholder="哪些条件或结论不适用？" rows={3} /></label><div className="modal-actions"><button className="outline-button" type="button" onClick={() => setReportTarget(null)}>取消</button><button className="primary-button" type="submit">提交反馈</button></div></form></div>}
     </div>
   );
 }
 
-function ChatMessage({ message, user, sessionId, busy, onOpenGroup, onCopy, onReport, onRetry, onReask, onVariant, onPublish }: {
-  message: Message; user: User; sessionId: string; busy: boolean; onOpenGroup: (id: string) => void; onCopy: () => void; onReport: () => void; onRetry: () => void; onReask: () => void; onVariant: (style: string) => Promise<void>; onPublish: (answer: string) => void;
+function ChatMessage({ message, user, sessionId, busy, isLastAssistant, onOpenGroup, onCopy, onExtract, onReport, onRetry, onRegenerate, onReask, onVariant, onPublish }: {
+  message: Message; user: User; sessionId: string; busy: boolean; isLastAssistant: boolean; onOpenGroup: (id: string) => void; onCopy: () => void;
+  onExtract: () => void; onReport: () => void; onRetry: () => void; onRegenerate: () => void; onReask: () => void;
+  onVariant: (style: string) => Promise<void>; onPublish: (answer: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [rewriting, setRewriting] = useState(false);
-  if (message.role === 'user') return <article className="user-message"><div className="user-message__identity">{user.name.slice(-1)}</div><div className="user-message__content">
+  if (message.role === 'user') return <article className="user-message" id={'chat-turn-' + message.id}><div className="user-message__identity">{user.name.slice(-1)}</div><div className="user-message__content">
     {message.meta?.image_id && <img className="chat-image" loading="lazy" alt={message.meta.image_name || '本次提问的图片'}
       src={`${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}/images/${encodeURIComponent(message.meta.image_id)}`} />}
     {message.content}</div></article>;
@@ -984,13 +1459,16 @@ function ChatMessage({ message, user, sessionId, busy, onOpenGroup, onCopy, onRe
     finally { setRewriting(false); }
   };
   return <article className={`assistant-message ${isError ? 'assistant-message--error' : ''}`}>
-    <div className="assistant-mark"><Sparkles size={15} /></div><div className="assistant-body">
-      <div className="assistant-meta"><strong>柒柿AI</strong><span className={`source-pill source-pill--${message.source ?? 'pending'}`}><i />{sourceName(meta.knowledge && !isError ? 'knowledge' : meta.image_id && !isError ? 'image' : meta.document_id && !isError ? 'document' : meta.web_search && !isError ? 'search' : message.source)}</span>{meta.match_type && meta.source === 'library' && <span className="match-hint">{meta.match_type === 'semantic' ? '意图匹配' : meta.match_type === 'alias' ? '等价问法' : '原问命中'}</span>}</div>
+    <div className="assistant-mark"><img src="/icons/cheese-mark.png" alt="" /></div><div className="assistant-body">
+      <div className="assistant-meta"><strong>{meta.import_provider ?? '柒柿AI'}</strong><span className={`source-pill source-pill--${message.source ?? 'pending'}`}><i />{sourceName(meta.knowledge && !isError ? 'knowledge' : meta.image_id && !isError ? 'image' : meta.document_id && !isError ? 'document' : meta.web_search && !isError ? 'search' : message.source)}</span>{meta.match_type && meta.source === 'library' && <span className="match-hint">{meta.match_type === 'semantic' ? '意图匹配' : meta.match_type === 'alias' ? '等价问法' : '原问命中'}</span>}</div>
       {isError ? <div className="error-answer"><CircleHelp size={16} /><span>{message.error || meta.error || '这次请求没有完成。'}</span><button onClick={onRetry} disabled={busy}><RefreshCw size={14} />重试</button></div> : <div className={`markdown-body ${message.status === 'streaming' ? 'markdown-body--streaming' : ''}`}>
-        {message.content ? (meta.personal_memory_command ? <p className="personal-memory-content">{message.content}</p> : meta.document_id || meta.knowledge ? <DocumentAnswer content={message.content} sources={meta.document_sources ?? []} name={meta.document_name} /> : meta.web_search ? <WebAnswer content={message.content} sources={meta.web_sources ?? []} /> : <ReactMarkdown remarkPlugins={[remarkGfm]} components={message.status === 'streaming' ? codeRenderers.streaming : codeRenderers.ready}>{message.content}</ReactMarkdown>) : message.status === 'streaming' ? <span className="typing-cursor" /> : <span className="muted-text">没有生成文字</span>}
+        {message.content ? (meta.personal_memory_command ? <p className="personal-memory-content">{message.content}</p> : meta.document_id || meta.knowledge ? <DocumentAnswer content={message.content} sources={meta.document_sources ?? []} name={meta.document_name} /> : meta.web_search ? <WebAnswer content={message.content} sources={meta.web_sources ?? []} /> : <ReactMarkdown remarkPlugins={[remarkGfm]} disallowedElements={meta.import_provider ? ['img'] : undefined} components={message.status === 'streaming' ? codeRenderers.streaming : codeRenderers.ready}>{message.content}</ReactMarkdown>) : message.status === 'streaming' ? <span className="typing-cursor" /> : <span className="muted-text">没有生成文字</span>}
       </div>}
       {!isError && message.status !== 'streaming' && <div className="message-actions">
         <button onClick={() => { onCopy(); setCopied(true); window.setTimeout(() => setCopied(false), 1400); }} title="复制回答">{copied ? <Check size={14} /> : <Copy size={14} />}<span>{copied ? '已复制' : '复制'}</span></button>
+        {message.status === 'done' && message.content && <button onClick={onExtract} disabled={busy}><BookOpen size={14} /><span>提取问答</span></button>}
+        {message.status === 'done' && meta.query && isLastAssistant &&
+          <button onClick={onRegenerate} disabled={busy} title="删掉这条回答并重新问一次"><RefreshCw size={14} /><span>重新回答</span></button>}
         {message.source === 'library' && <button onClick={onReask} disabled={busy}><RefreshCw size={14} /><span>重新问云端</span></button>}
         {canReport && !meta.web_search && !meta.document_id && !meta.image_id && <label className="variant-picker">
           {rewriting ? <LoaderCircle size={13} className="spin" /> : <ArrowLeftRight size={13} />}
@@ -1009,8 +1487,10 @@ function ChatMessage({ message, user, sessionId, busy, onOpenGroup, onCopy, onRe
         <button className="text-button" onClick={() => onOpenGroup(meta.learn_task!.group_id)}>查看{meta.group_scope === 'shared' ? '共享' : '个人'}问答</button>
       </div> : learningSkip && <div className="answer-learning">未入库 · {learningSkip}</div>}
       {!isError && meta.web_search && meta.web_sources?.length ? <SourceList sources={meta.web_sources} provider={meta.search_provider} /> : null}
-      {meta.search_url?.startsWith('https://www.baidu.com/s?') && <div className="web-sources">
-        <a href={meta.search_url} target="_blank" rel="noopener noreferrer">在百度查看结果</a>
+      {meta.search_url && /^https:\/\/(?:www\.baidu\.com\/s\?|(?:en|zh)\.wikipedia\.org\/wiki\/Special:Search\?)/.test(meta.search_url) && <div className="web-sources">
+        <a href={meta.search_url} target="_blank" rel="noopener noreferrer">
+          {meta.search_url.startsWith('https://www.baidu.com/') ? '在百度查看结果' : '在维基百科查看结果'}
+        </a>
       </div>}
       {message.status === 'streaming' && <div className="streaming-caption"><LoaderCircle size={12} className="spin" />正在生成</div>}
     </div>
@@ -1025,21 +1505,293 @@ function UsageSummary({ messages }: { messages: Message[] }) {
   return <div className="mini-usage"><div><span>已回答</span><strong>{assistant.filter((message) => message.status !== 'streaming').length}</strong></div><div><span>库内复用</span><strong>{reuse}</strong></div><div><span>云端调用</span><strong>{cloud}</strong></div>{latest && <small>最近完成 · {latest.meta?.total_ms} ms</small>}</div>;
 }
 
-function GroupDetail({ group, onToggle, onPublish }: { group: Group; onToggle: () => void; onPublish: (answer: string) => void }) {
+type SharedReview = {
+  verdict: 'pass' | 'revise' | 'verify';
+  summary: string;
+  findings: string[];
+  suggested_answer: string;
+  model: string;
+  version_id: string;
+};
+
+function SharedAiReview({ endpoint, versionId, onUseDraft }: {
+  endpoint: string;
+  versionId?: string;
+  onUseDraft?: (answer: string) => void;
+}) {
+  const [result, setResult] = useState<SharedReview>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function run() {
+    setBusy(true);
+    setError('');
+    setResult(undefined);
+    try {
+      const review = await api<SharedReview>(endpoint, { method: 'POST' });
+      if (versionId && review.version_id !== versionId) throw new Error('页面上的答案版本已更新，请重新打开条目。');
+      setResult(review);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '审核请求失败，请重试。');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <div className="shared-ai-review">
+    <button type="button" className="outline-button" disabled={busy} onClick={() => void run()}>
+      {busy ? <LoaderCircle className="spin" size={14} /> : <Sparkles size={14} />}
+      {busy ? '模型审核中…' : result ? '重新审核' : '大模型一键审核'}
+    </button>
+    {error && <p className="review-error" role="alert">{error}</p>}
+    {result && <div className="review-result" aria-live="polite">
+      <div className="review-result-title">
+        <strong>{({ pass: '建议通过', revise: '建议修改', verify: '需要核实' })[result.verdict]}</strong>
+        <small>{result.model} · 由管理员决定如何处理</small>
+      </div>
+      <p>{result.summary}</p>
+      {result.findings.length > 0 && <ul>{result.findings.map((finding, index) => <li key={index}>{finding}</li>)}</ul>}
+      {result.suggested_answer && <details>
+        <summary>查看修订草稿</summary>
+        <p className="review-draft">{result.suggested_answer}</p>
+        {onUseDraft && <button type="button" className="outline-button" onClick={() => onUseDraft(result.suggested_answer)}>
+          填入答案编辑框
+        </button>}
+      </details>}
+    </div>}
+  </div>;
+}
+
+function SharedSubmissionQueue({ entries, onResolved }: { entries: SharedSubmission[]; onResolved: () => Promise<void> }) {
+  const [pending, setPending] = useState<string>();
+  const [error, setError] = useState('');
+  async function resolve(id: string, action: 'approve' | 'reject') {
+    setPending(id);
+    setError('');
+    try {
+      await api('/api/shared-submissions/' + encodeURIComponent(id) + '/resolve', {
+        method: 'POST', body: JSON.stringify({ action }),
+      });
+      await onResolved();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '审核失败');
+    } finally {
+      setPending(undefined);
+    }
+  }
+  return <section className="data-section governance-entries">
+    <div className="data-section-head"><div><h2>共享待审核</h2><p>核对提交的问答后，可批准发布或驳回。</p></div></div>
+    {error && <p className="review-error" role="alert">{error}</p>}
+    {!entries.length && <InlineEmpty text="没有待处理的共享申请" />}
+    {entries.map((entry) => <article className="governance-row" key={entry.id}>
+      <div className="row-copy">
+        <strong>{entry.original}</strong><small>{entry.submitter} · {fmtDate(entry.created_at)}</small>
+        <details><summary>查看提交的答案</summary><div className="revision-preview">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} disallowedElements={['img']}>{entry.answer}</ReactMarkdown>
+        </div></details>
+      </div>
+      <div className="row-actions">
+        <button className="small-button small-button--accent" disabled={Boolean(pending)}
+          onClick={() => void resolve(entry.id, 'approve')}>{pending === entry.id ? '处理中…' : '批准并发布'}</button>
+        <button className="small-button" disabled={Boolean(pending)} onClick={() => void resolve(entry.id, 'reject')}>驳回</button>
+      </div>
+    </article>)}
+  </section>;
+}
+
+function GovernanceEntries({ selectedId, onSelect, onSaved }: {
+  selectedId?: string;
+  onSelect: (id?: string) => void;
+  onSaved: () => Promise<void>;
+}) {
+  const pageSize = 12;
+  const [input, setInput] = useState('');
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [entries, setEntries] = useState<Group[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError('');
+    const params = new URLSearchParams({ filter: 'shared', q: query, page: String(page), page_size: String(pageSize) });
+    api<GroupPage>('/api/groups?' + params, { signal: controller.signal })
+      .then((data) => { if (!controller.signal.aborted) { setEntries(data.items); setTotal(data.total); } })
+      .catch((cause: Error) => { if (!controller.signal.aborted) setError(cause.message); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [query, page]);
+
+  return <section className="data-section governance-entries">
+    <div className="data-section-head">
+      <div><h2>共享库条目</h2><p>打开条目即可审核、编辑并发布答案。</p></div>
+    </div>
+    <form className="governance-search" onSubmit={(event) => { event.preventDefault(); setQuery(input.trim()); setPage(1); }}>
+      <label className="search-field"><Search size={15} /><input aria-label="搜索共享库条目" placeholder="搜索问题或意图"
+        value={input} onChange={(event) => setInput(event.target.value)} /></label>
+      <button className="outline-button" type="submit">搜索</button>
+    </form>
+    {error ? <p role="alert" className="review-error">{error}</p> : loading ? <LoadingLine /> : entries.length ? <>
+      <ul className="governance-entry-list">
+        {entries.map((entry) => <li key={entry.id}>
+          <button type="button" onClick={() => onSelect(entry.id)} aria-haspopup="dialog">
+            <FileText size={14} /><span>{entry.original}</span>
+            {entry.status === 'disabled' && <small>已停用</small>}<ChevronRight size={14} />
+          </button>
+        </li>)}
+      </ul>
+      {(page > 1 || total > pageSize) && <div className="governance-pagination">
+        <button type="button" className="outline-button" disabled={page <= 1} onClick={() => setPage(page - 1)}>上一页</button>
+        <button type="button" className="outline-button" disabled={page * pageSize >= total} onClick={() => setPage(page + 1)}>下一页</button>
+      </div>}
+    </> : <InlineEmpty text="没有找到共享问答" />}
+    {selectedId && <GovernanceEntryDialog key={selectedId} id={selectedId} onClose={() => onSelect(undefined)}
+      onSaved={async (updated) => {
+        setEntries((current) => current.map((entry) => entry.id === updated.id ? { ...entry, ...updated, versions: undefined, aliases: undefined } : entry));
+        await onSaved();
+      }} />}
+  </section>;
+}
+
+function GovernanceEntryDialog({ id, onClose, onSaved }: {
+  id: string;
+  onClose: () => void;
+  onSaved: (group: Group) => Promise<void>;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [group, setGroup] = useState<Group>();
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const endpoint = '/api/groups/' + encodeURIComponent(id);
+
+  useEffect(() => { dialog.current?.showModal(); }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    api<Group>(endpoint, { signal: controller.signal }).then((entry) => {
+      if (!controller.signal.aborted) setGroup(entry);
+    }).catch((cause: Error) => {
+      if (!controller.signal.aborted) setError(cause.message);
+    });
+    return () => controller.abort();
+  }, [endpoint]);
+
+  async function publish(answer: string) {
+    if (!group?.can_manage) return false;
+    setError('');
+    setNotice('');
+    try {
+      await api(endpoint + '/versions', {
+        method: 'POST',
+        body: JSON.stringify({ answer, basis: '审核与治理编辑', base_version_id: group.current_version_id }),
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '发布失败');
+      return false;
+    }
+    setNotice('已发布新版本');
+    try {
+      const updated = await api<Group>(endpoint);
+      setGroup(updated);
+      await onSaved(updated);
+    } catch {
+      setError('答案已发布，重新打开此条目可查看最新版本。');
+    }
+    return true;
+  }
+
+  return <dialog className="governance-entry-dialog" ref={dialog} aria-labelledby="governance-entry-title"
+    onCancel={(event) => { event.preventDefault(); onClose(); }}>
+    <div className="governance-dialog-head">
+      <h2 id="governance-entry-title">共享问答审核</h2>
+      <button type="button" className="icon-button" onClick={onClose} aria-label="关闭审核条目"><X size={18} /></button>
+    </div>
+    <div className="governance-dialog-body" role="region" aria-label="条目内容" tabIndex={0}>
+      {error && <p className="review-error" role="alert">{error}</p>}
+      {notice && <p className="governance-publish-notice" role="status">{notice}</p>}
+      {group ? <GroupDetail group={group} onPublish={publish} onRefresh={async () => setGroup(await api<Group>(endpoint))} /> : !error && <LoadingLine />}
+    </div>
+  </dialog>;
+}
+
+function AliasBlock({ group, canManage, onRefresh }: { group: Group; canManage: boolean; onRefresh?: () => Promise<void> }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const shared = group.scope === 'shared';
+  const submit = async (suggest: boolean) => {
+    const value = text.trim();
+    if (!value || busy) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      if (suggest) {
+        await api(`/api/groups/${encodeURIComponent(group.id)}/alias-suggestions`, { method: 'POST', body: JSON.stringify({ text: value }) });
+        setMessage('已提交，等待管理员或审核处理');
+      } else {
+        await api(`/api/groups/${encodeURIComponent(group.id)}/aliases`, { method: 'POST', body: JSON.stringify({ text: value }) });
+        setMessage('已添加为等价问法');
+      }
+      setText('');
+      await onRefresh?.();
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : '提交失败');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (aliasId: string) => {
+    if (busy) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      await api(`/api/groups/${encodeURIComponent(group.id)}/aliases/${encodeURIComponent(aliasId)}`, { method: 'DELETE' });
+      setMessage('已删除');
+      await onRefresh?.();
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : '删除失败');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <>
+    {canManage ? <div className="alias-add"><input aria-label="新增等价问法" value={text} maxLength={60} placeholder="输入一个新问法，回车添加"
+      disabled={busy} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void submit(false); } }} />
+      <button className="small-button small-button--accent" type="button" disabled={busy || !text.trim()} onClick={() => void submit(false)}>添加</button></div>
+      : shared ? <div className="alias-add"><input aria-label="建议等价问法" value={text} maxLength={60} placeholder="建议一个等价问法，提交给管理员/审核"
+        disabled={busy} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void submit(true); } }} />
+        <button className="small-button" type="button" disabled={busy || !text.trim()} onClick={() => void submit(true)}>提交建议</button></div> : null}
+    {message && <p className="alias-message" role="status">{message}</p>}
+    <div className="alias-list">{group.aliases?.map((alias) => <div className="alias-row" key={alias.id}><span className="alias-dot" /><span>{alias.text}</span><small>{alias.status === 'active' ? alias.source === 'original' ? '原问' : alias.source === 'seed' ? '已收录' : alias.source === 'generated' ? '自动生成' : alias.source === 'manual' ? '手动添加' : '真实问法' : alias.reason ?? '未通过'}</small>{canManage && alias.source !== 'original' && <button className="text-button alias-delete" type="button" disabled={busy} onClick={() => void remove(alias.id)}>删除</button>}</div>)}</div>
+  </>;
+}
+
+function GroupDetail({ group, onToggle, onPublish, onRefresh }: { group: Group; onToggle?: () => void; onPublish: (answer: string) => Promise<boolean>; onRefresh?: () => Promise<void> }) {
   const [editing, setEditing] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const current = group.versions?.find((version) => version.id === group.current_version_id) ?? group.versions?.[0];
   const [answer, setAnswer] = useState(current?.answer ?? '');
   useEffect(() => { setAnswer(current?.answer ?? ''); setEditing(false); }, [group.id, current?.id]);
   const canManage = Boolean(group.can_manage);
+  async function publish() {
+    setPublishing(true);
+    try {
+      if (await onPublish(answer)) setEditing(false);
+    } finally {
+      setPublishing(false);
+    }
+  }
   return <div className="group-detail">
-    <div className="detail-head"><div><span className="eyebrow">{group.scope === 'shared' ? '共享问答组' : '个人问答组'}</span><h2>{group.original}</h2></div><button className="icon-button" title="更多操作"><MoreHorizontal size={18} /></button></div>
+    <div className="detail-head"><div><span className="eyebrow">{group.scope === 'shared' ? '共享问答组' : '个人问答组'}</span><h2>{group.original}</h2></div>{onToggle && <button className="icon-button" title="更多操作"><MoreHorizontal size={18} /></button>}</div>
     <p className="detail-intent">{group.intent}</p>
     <div className="detail-stats"><div><span>当前版本</span><strong>{current ? `v${current.n}` : '—'}</strong></div><div><span>命中次数</span><strong>{group.hits}</strong></div><div><span>等价问法</span><strong>{group.aliases?.filter((alias) => alias.status === 'active').length ?? 0}</strong></div><div><span>最后更新</span><strong>{fmtDate(group.updated_at)}</strong></div></div>
     <div className="detail-block"><div className="block-title"><h3>当前答案</h3>{canManage && !editing && <button className="text-button" onClick={() => setEditing(true)}>编辑答案</button>}</div>
-      {editing ? <><textarea className="answer-editor" value={answer} onChange={(event) => setAnswer(event.target.value)} rows={9} /><div className="editor-actions"><button className="outline-button" onClick={() => { setAnswer(current?.answer ?? ''); setEditing(false); }}>取消</button><button className="primary-button" onClick={() => { onPublish(answer); setEditing(false); }}>发布为新版本</button></div></> : <div className="answer-preview markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{current?.answer ?? '暂无已发布答案'}</ReactMarkdown></div>}
+      {editing ? <><textarea className="answer-editor" aria-label="编辑当前答案" value={answer} maxLength={12000} disabled={publishing} onChange={(event) => setAnswer(event.target.value)} rows={9} /><div className="editor-actions"><button className="outline-button" disabled={publishing} onClick={() => { setAnswer(current?.answer ?? ''); setEditing(false); }}>取消</button><button className="primary-button" disabled={publishing || !answer.trim()} onClick={() => void publish()}>{publishing ? '正在发布…' : '发布为新版本'}</button></div></> : <div className="answer-preview markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{current?.answer ?? '暂无已发布答案'}</ReactMarkdown></div>}
+      {group.scope === 'shared' && canManage && current && <SharedAiReview key={current.id} versionId={current.id}
+        endpoint={'/api/groups/' + encodeURIComponent(group.id) + '/ai-review'}
+        onUseDraft={!editing ? (draft) => { setAnswer(draft); setEditing(true); } : undefined} />}
     </div>
-    <div className="detail-block"><div className="block-title"><h3>等价问法</h3><span className="quiet-count">{group.aliases?.length ?? 0}</span></div>{group.learn_task && <div className="answer-learning" role="status">{learningLabel(group.learn_task)}</div>}<div className="alias-list">{group.aliases?.map((alias) => <div className="alias-row" key={alias.id}><span className="alias-dot" /><span>{alias.text}</span><small>{alias.status === 'active' ? alias.source === 'original' ? '原问' : alias.source === 'seed' ? '已收录' : alias.source === 'generated' ? '自动生成' : '真实问法' : alias.reason ?? '未通过'}</small></div>)}</div></div>
-    <div className="detail-block"><div className="block-title"><h3>答案版本</h3>{canManage && <button className="text-button" onClick={onToggle}>{group.status === 'active' ? '停用问答组' : '启用问答组'}</button>}</div><div className="version-list">{group.versions?.map((version) => <div className="version-row" key={version.id}><span className={`version-dot ${version.status === 'published' ? 'current' : ''}`} /><div><strong>v{version.n} · {version.status === 'published' ? '当前发布' : '历史版本'}</strong><small>{version.basis} · {fmtDate(version.created_at)}</small></div><span>{version.id === group.current_version_id ? '当前' : '留档'}</span></div>)}</div></div>
+    <div className="detail-block"><div className="block-title"><h3>等价问法</h3><span className="quiet-count">{group.aliases?.filter((alias) => alias.status === 'active').length ?? 0}</span></div>{group.learn_task && <div className="answer-learning" role="status">{learningLabel(group.learn_task)}</div>}<AliasBlock group={group} canManage={canManage} onRefresh={onRefresh} /></div>
+    <div className="detail-block"><div className="block-title"><h3>答案版本</h3>{canManage && onToggle && <button className="text-button" onClick={onToggle}>{group.status === 'active' ? '停用问答组' : '启用问答组'}</button>}</div><div className="version-list">{group.versions?.map((version) => <div className="version-row" key={version.id}><span className={`version-dot ${version.status === 'published' ? 'current' : ''}`} /><div><strong>v{version.n} · {version.status === 'published' ? '当前发布' : '历史版本'}</strong><small>{version.basis} · {fmtDate(version.created_at)}</small></div><span>{version.id === group.current_version_id ? '当前' : '留档'}</span></div>)}</div></div>
     <div className="detail-footer"><span><ShieldCheck size={14} />仅当前发布版本参与检索</span><span>{group.entities?.join(' · ')}</span></div>
   </div>;
 }
@@ -1052,35 +1804,40 @@ function SettingsSection({ icon, title, description, children }: { icon: React.R
   return <section className="settings-section"><div className="settings-section-head"><span>{icon}</span><div><h2>{title}</h2><p>{description}</p></div></div><div className="settings-fields">{children}</div></section>;
 }
 
-function MemberQuotaRow({ member, defaultLimit, onSaved, notify }: { member: MemberQuota; defaultLimit: number | null; onSaved: (list: MemberQuotaList) => void; notify: (text: string) => void }) {
+function MemberRow({ member, defaultLimit, canEditSelf, onSaved, notify }: { member: MemberQuota; defaultLimit: number | null; canEditSelf: boolean; onSaved: (list: MemberQuotaList) => void; notify: (text: string) => void }) {
   const [draft, setDraft] = useState(member.daily_cloud_calls === null ? '' : String(member.daily_cloud_calls));
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     setDraft(member.daily_cloud_calls === null ? '' : String(member.daily_cloud_calls));
   }, [member.daily_cloud_calls]);
-  const save = async (value: number | null) => {
+  const patch = async (body: Record<string, unknown>, message: string) => {
     setSaving(true);
     try {
       onSaved(await api<MemberQuotaList>(`/api/admin/members/${encodeURIComponent(member.id)}`, {
-        method: 'PATCH', body: JSON.stringify({ daily_cloud_calls: value }),
+        method: 'PATCH', body: JSON.stringify(body),
       }));
-      notify('成员额度已保存');
+      notify(message);
     } catch (cause) {
       notify(cause instanceof Error ? cause.message : '保存失败');
     } finally {
       setSaving(false);
     }
   };
+  const roles: Record<string, string> = { admin: '管理员', reviewer: '审核', member: '普通用户' };
   const used = `${member.used_today} 次${member.limit ? ` / ${member.limit}` : '（不限）'}`;
   return <div className="member-quota-row">
-    <span className="member-quota-who"><strong>{member.name}</strong><small>{member.role === 'admin' ? '管理员' : '成员'} · 今日 {used}</small></span>
+    <span className="member-quota-who"><strong>{member.name}{member.frozen ? ' · 已冻结' : ''}</strong><small>{roles[member.role] ?? member.role} · 今日 {used}</small></span>
     <span className="member-quota-controls">
+      <select aria-label={`${member.name} 的角色`} value={member.role} disabled={saving || canEditSelf}
+        onChange={(event) => void patch({ role: event.target.value }, '角色已更新')}>
+        <option value="admin">管理员</option><option value="reviewer">审核</option><option value="member">普通用户</option>
+      </select>
       <input type="number" min={0} max={10000} value={draft} placeholder={defaultLimit ? `默认 ${defaultLimit}` : '默认不限'}
         aria-label={`${member.name} 的每日云端额度`} onChange={(event) => setDraft(event.target.value)} />
       <button className="small-button" type="button" disabled={saving}
-        onClick={() => void save(draft.trim() === '' ? null : Number(draft))}>保存</button>
-      <button className="small-button" type="button" disabled={saving} onClick={() => void save(null)}>默认</button>
-      <button className="small-button" type="button" disabled={saving} onClick={() => void save(0)}>不限</button>
+        onClick={() => void patch({ daily_cloud_calls: draft.trim() === '' ? null : Number(draft) }, '额度已保存')}>保存额度</button>
+      <button className="small-button" type="button" disabled={saving || canEditSelf}
+        onClick={() => void patch({ frozen: !member.frozen }, member.frozen ? '账号已解冻' : '账号已冻结，登录已失效')}>{member.frozen ? '解冻' : '冻结账号'}</button>
     </span>
   </div>;
 }

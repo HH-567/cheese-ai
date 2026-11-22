@@ -16,7 +16,7 @@ PRAGMA foreign_keys=ON;
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'member',
   verified INTEGER NOT NULL DEFAULT 1, password_hash TEXT NOT NULL, created_at TEXT NOT NULL,
-  daily_cloud_calls INTEGER
+  daily_cloud_calls INTEGER, frozen INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS auth_sessions (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -85,6 +85,21 @@ CREATE TABLE IF NOT EXISTS aliases (
   text TEXT NOT NULL, text_key TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', reason TEXT,
   source TEXT NOT NULL DEFAULT 'generated', created_at TEXT NOT NULL, UNIQUE(group_id, text_key)
 );
+CREATE TABLE IF NOT EXISTS alias_suggestions (
+  id TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  by_user_id TEXT NOT NULL REFERENCES users(id), text TEXT NOT NULL, text_key TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending',
+  reply TEXT, handled_by TEXT, handled_at TEXT, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_alias_suggestions_pending ON alias_suggestions(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_alias_suggestions_group ON alias_suggestions(group_id, status);
+CREATE TABLE IF NOT EXISTS providers (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', base_url TEXT NOT NULL,
+  model TEXT NOT NULL, api_key TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_providers_user ON providers(user_id, created_at);
 CREATE TABLE IF NOT EXISTS variants (
   id TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   version_id TEXT NOT NULL REFERENCES group_versions(id) ON DELETE CASCADE,
@@ -108,6 +123,7 @@ CREATE TABLE IF NOT EXISTS answer_reports (
   id TEXT PRIMARY KEY, message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
   by_user_id TEXT NOT NULL REFERENCES users(id), category TEXT NOT NULL, note TEXT NOT NULL,
   question TEXT NOT NULL, answer TEXT NOT NULL, created_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open', resolution TEXT, reply TEXT, handled_by TEXT, handled_at TEXT,
   UNIQUE(message_id, by_user_id, category)
 );
 CREATE TABLE IF NOT EXISTS suspensions (
@@ -125,6 +141,22 @@ CREATE TABLE IF NOT EXISTS source_checks (
   source TEXT NOT NULL, source_version TEXT NOT NULL, checked_at TEXT NOT NULL, observed_version TEXT,
   answer TEXT, lease_id TEXT, lease_until REAL NOT NULL DEFAULT 0, PRIMARY KEY (source, source_version)
 );
+CREATE TABLE IF NOT EXISTS shared_submissions (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL REFERENCES users(id),
+  group_id TEXT NOT NULL,
+  version_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+  created_at TEXT NOT NULL,
+  handled_by TEXT REFERENCES users(id),
+  handled_at TEXT,
+  shared_group_id TEXT REFERENCES groups(id) ON DELETE SET NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_shared_submissions_pending
+  ON shared_submissions(group_id) WHERE status='pending';
+CREATE INDEX IF NOT EXISTS idx_shared_submissions_queue ON shared_submissions(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_shared_submissions_group ON shared_submissions(group_id, created_at DESC);
 CREATE TABLE IF NOT EXISTS learn_tasks (
   id TEXT PRIMARY KEY, group_id TEXT NOT NULL UNIQUE REFERENCES groups(id) ON DELETE CASCADE,
   state TEXT NOT NULL DEFAULT 'queued', attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT,
@@ -137,6 +169,15 @@ CREATE TABLE IF NOT EXISTS usage (
   total_ms INTEGER NOT NULL DEFAULT 0, cost REAL NOT NULL DEFAULT 0,
   tokens_in INTEGER NOT NULL DEFAULT 0, tokens_out INTEGER NOT NULL DEFAULT 0,
   ok INTEGER NOT NULL DEFAULT 1, reported INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS work_rules (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  plan_json TEXT NOT NULL,
+  parameters_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(owner_id, name)
 );
 CREATE TABLE IF NOT EXISTS settings (
   user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -160,6 +201,9 @@ CREATE INDEX IF NOT EXISTS idx_sessions_owner_updated ON sessions(owner_id, upda
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_aliases_key ON aliases(text_key);
 CREATE INDEX IF NOT EXISTS idx_groups_review ON groups(review_at) WHERE status='active' AND review_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_groups_scope_updated ON groups(scope, updated_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_groups_owner_updated ON groups(owner_id, scope, updated_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_reports_group ON reports(group_id);
 CREATE INDEX IF NOT EXISTS idx_reports_target_time ON reports(target_key, created_at);
 CREATE INDEX IF NOT EXISTS idx_usage_user_time ON usage(user_id, at);
 """
@@ -229,9 +273,19 @@ def initialize() -> None:
                 db.execute("ALTER TABLE settings ADD COLUMN font_scale INTEGER NOT NULL DEFAULT 100")
             if "auto_alias" not in setting_columns:
                 db.execute("ALTER TABLE settings ADD COLUMN auto_alias INTEGER NOT NULL DEFAULT 1")
+            report_columns = {row["name"] for row in db.execute("PRAGMA table_info(reports)")}
+            if "reply" not in report_columns:
+                db.execute("ALTER TABLE reports ADD COLUMN reply TEXT")
+            answer_columns = {row["name"] for row in db.execute("PRAGMA table_info(answer_reports)")}
+            for column, ddl in (("status", "TEXT NOT NULL DEFAULT 'open'"), ("resolution", "TEXT"),
+                                ("reply", "TEXT"), ("handled_by", "TEXT"), ("handled_at", "TEXT")):
+                if column not in answer_columns:
+                    db.execute(f"ALTER TABLE answer_reports ADD COLUMN {column} {ddl}")
             user_columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
             if "daily_cloud_calls" not in user_columns:
                 db.execute("ALTER TABLE users ADD COLUMN daily_cloud_calls INTEGER")
+            if "frozen" not in user_columns:
+                db.execute("ALTER TABLE users ADD COLUMN frozen INTEGER NOT NULL DEFAULT 0")
         db.commit()
         if config.DEMO_MODE:
             _seed_demo(db)

@@ -9,6 +9,7 @@ import urllib.error
 import urllib.request
 import uuid
 from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from typing import Any, Iterator
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -98,6 +99,29 @@ def run_tool(query: str, timezone_name: str, *, now: datetime | None = None) -> 
             return f"{candidate.replace('**', '^')} = **{displayed}**", {"tool": "calculator", "expression": candidate, "result": displayed}
         except (TypeError, ValueError, OverflowError, ZeroDivisionError, SyntaxError):
             return None
+
+    comparison = re.fullmatch(
+        r"\s*(?:请问|帮我|比较一下|比较)?\s*"
+        r"(-?\d+(?:\.\d+)?)\s*(?:和|与|跟|vs\.?|VS\.?|比)\s*(-?\d+(?:\.\d+)?)\s*"
+        r"(?:(?:哪个|谁)\s*(?:更)?(?:大|小)|更大|更小|大吗|小吗|比较大小|大小|谁大|谁小)\s*[？?。!！]*",
+        normalized,
+    )
+    if comparison:
+        first, second = comparison[1], comparison[2]
+        try:
+            left, right = Decimal(first), Decimal(second)
+        except InvalidOperation:
+            return None
+        if left == right:
+            text = f"{first} 和 {second} 一样大。"
+        else:
+            bigger, smaller = (first, second) if left > right else (second, first)
+            text = f"{bigger} 更大（{bigger} > {smaller}）。"
+            if "." in bigger and "." in smaller:
+                digits = max(len(bigger.split(".")[1]), len(smaller.split(".")[1]))
+                text += (f" 按数值比较，{bigger} 就是 {Decimal(bigger):.{digits}f}，"
+                         f"{smaller} 就是 {Decimal(smaller):.{digits}f}。")
+        return text, {"tool": "compare", "expression": f"{first} 和 {second}"}
     return None
 
 
@@ -137,9 +161,10 @@ def resolve_reference(query: str, messages: list[dict[str, Any]]) -> tuple[str, 
     return resolved, {"decision": "cloud", "options": []}, True
 
 
-def cloud_url() -> str:
-    base = config.CLOUD_BASE_URL
-    if not base or not config.CLOUD_API_KEY:
+def cloud_url(base_url: str | None = None, api_key: str | None = None) -> str:
+    base = (base_url or config.CLOUD_BASE_URL).rstrip("/")
+    key = api_key or config.CLOUD_API_KEY
+    if not base or not key:
         raise RuntimeError("尚未配置云端模型。请设置 CLOUD_BASE_URL、CLOUD_API_KEY 和 CLOUD_MODEL。")
     if base.endswith("/chat/completions"):
         return base
@@ -155,7 +180,8 @@ def estimated_cost(tokens_in: int, tokens_out: int, *, model: str | None = None)
 
 
 def stream_cloud(messages: list[dict[str, Any]], usage: dict[str, int], *, model: str | None = None,
-                 local: bool = False) -> Iterator[str]:
+                 local: bool = False, base_url: str | None = None,
+                 api_key: str | None = None) -> Iterator[str]:
     body = {"model": model or config.CLOUD_MODEL, "messages": messages, "stream": True, "stream_options": {"include_usage": True}}
     label = "本地模型" if local else "云端模型"
     if local:
@@ -168,8 +194,8 @@ def stream_cloud(messages: list[dict[str, Any]], usage: dict[str, int], *, model
         body["max_tokens"] = 384
         headers = {}
     else:
-        url = cloud_url()
-        headers = {"Authorization": f"Bearer {config.CLOUD_API_KEY}"}
+        url = cloud_url(base_url, api_key)
+        headers = {"Authorization": f"Bearer {api_key or config.CLOUD_API_KEY}"}
     if not local and config.CLOUD_MAX_TOKENS:
         body["max_tokens"] = config.CLOUD_MAX_TOKENS
     payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -223,14 +249,15 @@ def stream_cloud(messages: list[dict[str, Any]], usage: dict[str, int], *, model
 
 
 def complete_cloud(messages: list[dict[str, str]], *, max_tokens: int | None = None,
-                   model: str | None = None) -> tuple[str, dict[str, int]]:
+                   model: str | None = None, base_url: str | None = None,
+                   api_key: str | None = None) -> tuple[str, dict[str, int]]:
     body = {"model": model or config.CLOUD_MODEL, "messages": messages, "stream": False}
     limit = max_tokens or config.CLOUD_MAX_TOKENS
     if limit:
         body["max_tokens"] = limit
     payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
-    request = urllib.request.Request(cloud_url(), data=payload, headers={
-        "Authorization": f"Bearer {config.CLOUD_API_KEY}", "Content-Type": "application/json"
+    request = urllib.request.Request(cloud_url(base_url, api_key), data=payload, headers={
+        "Authorization": f"Bearer {api_key or config.CLOUD_API_KEY}", "Content-Type": "application/json"
     }, method="POST")
     try:
         with urllib.request.urlopen(request, timeout=config.CLOUD_TIMEOUT_SECONDS) as response:

@@ -123,7 +123,7 @@ def main():
         try:
             with run_app(data_dir, model.server_port):
                 owner = Client("u-a")
-                assert not owner.json("GET", "/api/groups")
+                assert owner.json("GET", "/api/groups")["total"] == 0
                 _, events = ask(owner, QUESTION)
                 done = next(data for name, data in events if name == "done")
                 assert done["source"] == "cloud" and done["tokens_in"] == 24, done
@@ -134,7 +134,7 @@ def main():
                 assert events[-1][0] == "error", events
                 history = owner.json("GET", f"/api/sessions/{session}")
                 assert history["messages"][-1]["status"] == "error", history
-                assert len(owner.json("GET", "/api/groups")) == 1
+                assert owner.json("GET", "/api/groups")["total"] == 1
                 for _ in range(120):
                     if ModelFixture.learning_attempts:
                         break
@@ -177,7 +177,7 @@ def main():
                 done = events[-1][1]
                 assert events[-1][0] == "done" and done["source"] == "cloud" and done["group_scope"] == "personal", events[-1]
                 personal_group_id = done["learn_task"]["group_id"]
-                assert [g["original"] for g in owner.json("GET", "/api/groups?filter=mine")] == [NEW_TOPIC]
+                assert [g["original"] for g in owner.json("GET", "/api/groups?filter=mine")["items"]] == [NEW_TOPIC]
                 assert member.request("GET", f"/api/groups/{personal_group_id}")[0] == 404
                 _, events = ask(owner, NEW_TOPIC, personal_id)
                 done = events[-1][1]
@@ -186,7 +186,7 @@ def main():
                 _, events = ask(owner, CHANGED_INPUT, personal_id)
                 done = events[-1][1]
                 assert done["source"] == "cloud" and done["learn_task"]["group_id"] != personal_group_id, done
-                assert {g["original"] for g in owner.json("GET", "/api/groups?filter=mine")} == {NEW_TOPIC, CHANGED_INPUT}
+                assert {g["original"] for g in owner.json("GET", "/api/groups?filter=mine")["items"]} == {NEW_TOPIC, CHANGED_INPUT}
                 for question, expected_group_id in ((NEW_TOPIC, personal_group_id), (CHANGED_INPUT, done["group_id"])):
                     _, events = ask(owner, question, personal_id)
                     done = events[-1][1]

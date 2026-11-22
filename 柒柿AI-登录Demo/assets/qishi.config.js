@@ -7,7 +7,7 @@
 window.__QISHI_CFG__ = {
   brand: {
     zh: '柒柿 AI',
-    en: 'QISHI',
+    en: 'CHEESE AI',
     org: '柒柿实验室',
     /* 品牌色。片头里它同时管：光标/步骤读数、终幕高光（WELCOME TO 与欢迎语）、
        色散副本的暖色那一路 —— 换成别的颜色整套高光跟着走。 */
@@ -16,12 +16,12 @@ window.__QISHI_CFG__ = {
     line2: 'ACCESS CONTROL',
     /* 底板右上角的两个字块，原来是 HARNESS / OS */
     tag: ['ACCESS', 'GATE'],
-    welcomeBox: 'QISHI AI',
+    welcomeBox: 'CHEESE AI',
     /* 终幕标识下面那行字，字母间空格是刻意的（原版对着参考片调的） */
-    welcomeLabel: 'Q I S H I  ·  A I',
+    welcomeLabel: 'C H E E S E  ·  A I',
     /* 片头第 3 幕 logo 下方那行字（原版是 D E E P S E E K） */
-    logoLabel: 'Q I S H I',
-    footer: 'POWERED BY QISHI'
+    logoLabel: 'C H E E S E',
+    footer: 'POWERED BY CHEESE AI'
   },
 
   /* 片头本身 */

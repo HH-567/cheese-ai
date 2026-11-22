@@ -3,7 +3,7 @@ from __future__ import annotations
 import html
 import json
 import re
-from typing import TypedDict
+from typing import Literal, TypedDict, cast
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, build_opener
 
@@ -22,14 +22,59 @@ class WebSearchError(RuntimeError):
     pass
 
 
-def search_provider() -> str:
-    return "Brave Search" if config.SEARCH_PROVIDER == "brave" else "百度"
+SearchProvider = Literal["baidu", "wikipedia", "deepseek", "brave"]
+PROVIDERS: dict[SearchProvider, str] = {
+    "baidu": "百度", "wikipedia": "维基百科", "deepseek": "DeepSeek 搜索", "brave": "Brave Search",
+}
+DEEPSEEK_QUERY_LIMIT = 128
 
 
-def search_results_link(query: str) -> str | None:
-    if config.SEARCH_PROVIDER == "brave":
-        return None
-    return "https://www.baidu.com/s?" + urlencode({"wd": query})
+def default_search_provider() -> SearchProvider:
+    return cast(SearchProvider, config.SEARCH_PROVIDER) if config.SEARCH_PROVIDER in PROVIDERS else "baidu"
+
+
+def search_provider(provider: SearchProvider | None = None) -> str:
+    return PROVIDERS[provider or default_search_provider()]
+
+
+def _deepseek_key() -> str:
+    if config.DEEPSEEK_SEARCH_API_KEY:
+        return config.DEEPSEEK_SEARCH_API_KEY
+    try:
+        cloud = urlsplit(config.CLOUD_BASE_URL)
+        if cloud.scheme == "https" and cloud.netloc.lower() == "api.deepseek.com":
+            return config.CLOUD_API_KEY
+    except ValueError:
+        pass
+    return ""
+
+
+def search_catalog() -> list[dict]:
+    configured = {
+        "baidu": bool(config.BAIDU_API_KEY), "wikipedia": True,
+        "deepseek": bool(_deepseek_key()), "brave": bool(config.BRAVE_SEARCH_API_KEY),
+    }
+    return [{"id": provider, "label": label, "configured": configured[provider]}
+            for provider, label in PROVIDERS.items()
+            if provider != "brave" or configured["brave"] or default_search_provider() == "brave"]
+
+
+def _has_chinese(text: str) -> bool:
+    return bool(re.search(r"[\u3400-\u9fff]", text))
+
+
+def _wikipedia_base(query: str) -> str:
+    lang = "zh" if _has_chinese(query) else "en"
+    return f"https://{lang}.wikipedia.org"
+
+
+def search_results_link(query: str, provider: SearchProvider | None = None) -> str | None:
+    provider = provider or default_search_provider()
+    if provider == "baidu":
+        return "https://www.baidu.com/s?" + urlencode({"wd": query})
+    if provider == "wikipedia":
+        return _wikipedia_base(query) + "/wiki/Special:Search?" + urlencode({"search": query})
+    return None
 
 
 def _text(value: object, limit: int) -> str:
@@ -73,25 +118,61 @@ def _baidu_entries(query: str) -> list[dict]:
             for item in entries if isinstance(item, dict) and item.get("type", "web") == "web"]
 
 
-def find_web_sources(query: str) -> list[WebSource]:
+def _wikipedia_entries(query: str) -> list[dict]:
+    base = _wikipedia_base(query)
+    params = urlencode({
+        "action": "query", "list": "search", "srsearch": query, "srnamespace": 0,
+        "srlimit": 5, "srprop": "snippet", "format": "json", "formatversion": 2,
+    })
+    headers = {"User-Agent": config.WIKIPEDIA_USER_AGENT} if config.WIKIPEDIA_USER_AGENT else {}
+    data = _search_json(f"{base}/w/api.php?{params}", headers)
+    entries = data["query"]["search"]
+    if not isinstance(entries, list):
+        raise ValueError("Unexpected Wikipedia results")
+    return [{"title": item.get("title"), "url": f"{base}/wiki/Special:Redirect/page/{item['pageid']}",
+             "description": item.get("snippet")}
+            for item in entries if isinstance(item, dict) and type(item.get("pageid")) is int and item["pageid"] > 0]
+
+
+def _deepseek_entries(query: str) -> list[dict]:
+    key = _deepseek_key()
+    if not key:
+        raise WebSearchError("站内 DeepSeek 搜索尚未配置。请选择其他搜索引擎。")
+    if len(query) > DEEPSEEK_QUERY_LIMIT:
+        raise WebSearchError(f"请将 DeepSeek 搜索问题缩短到 {DEEPSEEK_QUERY_LIMIT} 个字符以内。")
+    data = _search_json("https://api.deepseek.com/v1/tools/search", {
+        "Authorization": f"Bearer {key}", "Content-Type": "application/json",
+    }, {"query": query, "count": 5})
+    entries = data["results"]
+    if not isinstance(entries, list):
+        raise ValueError("Unexpected DeepSeek results")
+    return [{"title": item.get("title"), "url": item.get("url"),
+             "description": item.get("summary") or item.get("snippet")}
+            for item in entries if isinstance(item, dict)]
+
+
+def _brave_entries(query: str) -> list[dict]:
+    if not config.BRAVE_SEARCH_API_KEY:
+        raise WebSearchError("站内 Brave Search 尚未启用。")
+    params = urlencode({
+        "q": query, "count": 5, "search_lang": "zh-hans" if _has_chinese(query) else "en", "safesearch": "moderate",
+    })
+    data = _search_json(f"https://api.search.brave.com/res/v1/web/search?{params}",
+                        {"X-Subscription-Token": config.BRAVE_SEARCH_API_KEY})
+    return data.get("web", {}).get("results", [])
+
+
+def find_web_sources(query: str, provider: SearchProvider | None = None) -> list[WebSource]:
+    provider = provider or default_search_provider()
     words = " ".join(query.split())
+    fetch = {"baidu": _baidu_entries, "wikipedia": _wikipedia_entries,
+             "deepseek": _deepseek_entries, "brave": _brave_entries}
     try:
-        if config.SEARCH_PROVIDER == "brave":
-            if not config.BRAVE_SEARCH_API_KEY:
-                raise WebSearchError("站内 Brave Search 尚未启用。")
-            chinese = bool(re.search(r"[\u3400-\u9fff]", words))
-            params = urlencode({
-                "q": words, "count": 5, "search_lang": "zh-hans" if chinese else "en", "safesearch": "moderate",
-            })
-            data = _search_json(f"https://api.search.brave.com/res/v1/web/search?{params}",
-                                {"X-Subscription-Token": config.BRAVE_SEARCH_API_KEY})
-            entries = data.get("web", {}).get("results", [])
-        else:
-            entries = _baidu_entries(words)
+        entries = fetch[provider](words)
         if not isinstance(entries, list):
             raise ValueError("Unexpected search results")
     except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
-        raise WebSearchError(f"暂时无法访问{search_provider()}，请稍后重试。") from error
+        raise WebSearchError(f"暂时无法访问{search_provider(provider)}，请稍后重试。") from error
 
     sources: list[WebSource] = []
     seen: set[str] = set()

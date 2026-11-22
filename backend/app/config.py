@@ -45,6 +45,8 @@ SEARCH_PROVIDER = os.getenv("QISHI_SEARCH_PROVIDER", "baidu").strip().lower()
 KNOWLEDGE_FALLBACK_SCORE = float(os.getenv("QISHI_KNOWLEDGE_FALLBACK_SCORE", "0.40"))
 BAIDU_API_KEY = os.getenv("BAIDU_API_KEY", "").strip()
 BRAVE_SEARCH_API_KEY = os.getenv("BRAVE_SEARCH_API_KEY", "").strip()
+DEEPSEEK_SEARCH_API_KEY = os.getenv("DEEPSEEK_SEARCH_API_KEY", "").strip()
+WIKIPEDIA_USER_AGENT = os.getenv("WIKIPEDIA_USER_AGENT", "CheeseAI/1.0 (user-requested citation search)").strip()
 EMBEDDING_MODEL_PATH = os.getenv("QISHI_EMBEDDING_MODEL", "")
 RERANKER_MODEL_PATH = os.getenv("QISHI_RERANKER_MODEL", "")
 # 「画一只骑自行车的鹈鹕」默认给哪一版整页：complete / simple / simple2。

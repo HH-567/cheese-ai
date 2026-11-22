@@ -125,7 +125,7 @@ POST /api/match
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/api/groups?filter=all\|mine\|shared\|review\|disabled&q=` | 问题组列表（含版本数、命中数、状态、暂停数） |
+| `GET` | `/api/groups?filter=all\|mine\|shared\|review\|disabled&q=&page=1&page_size=25` | 返回当前页 `items`、筛选后的 `total`、`page` 和 `page_size` |
 | `GET` | `/api/groups/{gid}` | 详情：版本时间线、表达变体、等价问法（含拒收原因）、时效策略 |
 | `POST` | `/api/groups/{gid}/versions` | 发布新版本 `{answer, basis}`；旧版置 `superseded` |
 | `POST` | `/api/groups/{gid}/rollback` | `{version_id}` 回滚（留痕） |

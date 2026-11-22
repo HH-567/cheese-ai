@@ -35,13 +35,17 @@ from app.matcher import normalize  # noqa: E402
 
 
 def acceptable(question: str) -> bool:
-    if not 4 <= len(question) <= 30:
+    """外包问法的轻量校验：长度、中文占比，不要把产品名当英文句子拒掉。"""
+    if not 4 <= len(question) <= 35:
         return False
-    if not re.search(r"[\u4e00-\u9fff]{2}", question):
+    cjk = len(re.findall(r"[\u4e00-\u9fff]", question))
+    if cjk < 2:
         return False
-    if re.search(r"[a-zA-Z]{4,}", question):
+    latin = len(re.findall(r"[a-zA-Z]", question))
+    # 整句英文（拉丁字母远多于中文且带空格）才拒；GitHub / SQLite / ModuleNotFoundError 这类产品名保留。
+    if latin > cjk * 2 and " " in question:
         return False
-    return question[-1] in "？?吗呢" or any(word in question for word in ("哪", "什么", "怎么", "如何", "为什么"))
+    return True
 
 
 def load_items(path: Path) -> list[dict]:

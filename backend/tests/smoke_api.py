@@ -117,7 +117,7 @@ def main():
     assert forbidden == 404, forbidden
     denied, _ = member.request("POST", "/api/groups/grp_bool_empty/versions", {"answer": "不允许成员发布", "basis": "test"})
     assert denied == 403, denied
-    assert owner.json("GET", "/api/groups?filter=shared")
+    assert owner.json("GET", "/api/groups?filter=shared")["items"]
 
     status, raw = owner.request("POST", f"/api/sessions/{session_id}/messages", {"text": "请解释量子纠缠的基本概念"})
     events = sse_events(raw)

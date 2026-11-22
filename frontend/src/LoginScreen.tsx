@@ -72,7 +72,7 @@ export default function LoginScreen({ demoUsers, openRegistration, playIntro, au
     const host = holder.current;
     host.append(root);
     const script = document.createElement('script');
-    script.src = `${base}/splash.js`;
+    script.src = `${base}/splash.js?v=7`;
 
     const reveal = () => {
       if (!playing.current) return;
@@ -88,9 +88,9 @@ export default function LoginScreen({ demoUsers, openRegistration, playIntro, au
       openingSweep: false, waitForSoundGesture: true, diagnostics: false, sound: !muted, soundVolume: 0.5, sfx: 'audio',
       voice: !muted, voiceLang: 'en', voiceSource: 'asset', voicePack: 'f', voiceCue: true, welcomeDelay: 1500,
       identity: 'OPERATOR', identityId: '0000', accessLevel: '—',
-      brand1: 'QISHI', brand2: 'ACCESS CONTROL', brand3a: 'ACCESS', brand3b: 'GATE',
-      orgZh: '柒柿 AI', orgEn: 'QISHI', orgSub: 'QISHI ACCESS GATE', welcomeBox: 'QISHI AI',
-      welcomeLabel: 'Q I S H I  ·  A I', logoLabel: 'Q I S H I', footer: 'POWERED BY QISHI',
+      brand1: 'CHEESE', brand2: 'ACCESS CONTROL', brand3a: 'ACCESS', brand3b: 'GATE',
+      orgZh: '柒柿 AI', orgEn: 'CHEESE AI', orgSub: 'CHEESE AI ACCESS GATE', welcomeBox: 'CHEESE AI',
+      welcomeLabel: 'C H E E S E  ·  A I', logoLabel: 'C H E E S E', footer: 'POWERED BY CHEESE AI',
       accent: '#ff7500', transitionIn: 'dissolve', transitionJoin: 'dissolve', transitionOut: 'dissolve',
     };
     window.__QISHI_LOGIN__ = {
@@ -248,8 +248,8 @@ export default function LoginScreen({ demoUsers, openRegistration, playIntro, au
     </div> : fields, gate.card)}
     {!showIntro && <main className="qa-root qa-root--login">
       <div className="qa-login">
-        <div className="qa-login-brand"><img className="qa-mark" src={`${base}/qishi-icon.svg`} alt="" />
-          <span className="qa-brand-mark">QISHI</span><span className="qa-brand-sub">ACCESS CONTROL</span>
+        <div className="qa-login-brand"><img className="qa-mark" src={`${base}/assets/cheese/cheese-black.png`} alt="" />
+          <span className="qa-brand-mark">CHEESE</span><span className="qa-brand-sub">ACCESS CONTROL</span>
         </div>
         <section className="qa-login-plate">
           <header className="qa-login-head"><div className="qa-eyebrow">IDENTITY VERIFICATION</div>

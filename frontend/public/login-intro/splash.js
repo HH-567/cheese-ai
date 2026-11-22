@@ -588,10 +588,71 @@
     svg.setAttribute('viewBox', '0 0 50 50')
     svg.setAttribute('aria-hidden', 'true')
     if (cls) svg.setAttribute('class', cls)
-    var p = document.createElementNS(ns, 'path')
-    p.setAttribute('d', BRAND_PATH)
-    p.setAttribute('fill-rule', 'evenodd')   /* 柒柿标识有字腔与叶缝两个孔 */
-    svg.appendChild(p)
+    var base = (window.__QISHI_ASSET_BASE__ || '') + '/cheese/'
+    var xlink = 'http://www.w3.org/1999/xlink'
+    var ver = '?v=7'
+    if (cls === 'dsu-brand-mark' || cls === 'dsu-w3-mark') {
+      /* 黑底白标、欢迎页实心黑标：直接用现成图片，不做描线动画。 */
+      var href = base + (cls === 'dsu-brand-mark' ? 'cheese-white.png' : 'cheese-black.png') + ver
+      var img = document.createElementNS(ns, 'image')
+      img.setAttribute('class', 'cheese-fill')
+      img.setAttribute('href', href)
+      img.setAttributeNS(xlink, 'xlink:href', href)
+      img.setAttribute('width', '50')
+      img.setAttribute('height', '50')
+      img.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+      svg.appendChild(img)
+      return svg
+    }
+    /* 纸面 logo：按写 C 的顺序画——右上起笔，经左上、左下，到右下收笔；
+       再补上中间的点线，最后整体填充成实心。 */
+    function mk(tag, attrs) {
+      var node = document.createElementNS(ns, tag)
+      for (var key in attrs) node.setAttribute(key, attrs[key])
+      return node
+    }
+    var outline = mk('g', { class: 'cheese-outline-group', fill: 'none', stroke: 'currentColor',
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round' })
+    outline.appendChild(mk('path', {
+      class: 'cheese-pen', d: 'M28.4,15.3 A10.5,10.5 0 1 0 28.4,34.7',
+      'stroke-width': '1.6', pathLength: '100', 'stroke-dasharray': '100', 'stroke-dashoffset': '100'
+    }))
+    var parts = [
+      ['circle', { cx: '20.5', cy: '25', r: '3.4' }, 1000],
+      ['path', { d: 'M23.9,25 L29.4,24.2' }, 1120],
+      ['circle', { cx: '30.4', cy: '24.2', r: '1.4' }, 1220],
+      ['circle', { cx: '24.0', cy: '30.2', r: '1.4' }, 1320],
+      ['path', { d: 'M36.4,7.6 L37.8,11.1 L41.3,12.5 L37.8,13.9 L36.4,17.4 L35,13.9 L31.5,12.5 L35,11.1 Z' }, 1440]
+    ]
+    for (var i = 0; i < parts.length; i++) {
+      var attrs = { class: 'cheese-part', 'stroke-width': '1.5', pathLength: '100',
+        'stroke-dasharray': '100', 'stroke-dashoffset': '100',
+        style: 'animation-delay:' + parts[i][2] + 'ms' }
+      for (var key in parts[i][1]) attrs[key] = parts[i][1][key]
+      outline.appendChild(mk(parts[i][0], attrs))
+    }
+    var drawing = mk('g', { class: 'cheese-drawing',
+      transform: 'translate(24.5 25) scale(1.26) translate(-24.5 -25)' })
+    drawing.appendChild(outline)
+    var solid = mk('g', { class: 'cheese-fill-shapes', fill: 'currentColor', opacity: '0' })
+    solid.appendChild(mk('path', { d: 'M28.8,13.2 A12.6,12.6 0 1 0 28.8,36.8 L27.5,33.3 A8.8,8.8 0 1 1 27.5,16.7 Z' }))
+    solid.appendChild(mk('circle', { cx: '20.5', cy: '25', r: '3.4' }))
+    solid.appendChild(mk('path', { d: 'M23.9,25 L29.4,24.2', stroke: 'currentColor', 'stroke-width': '1.6', 'stroke-linecap': 'round' }))
+    solid.appendChild(mk('circle', { cx: '30.4', cy: '24.2', r: '1.4' }))
+    solid.appendChild(mk('circle', { cx: '24.0', cy: '30.2', r: '1.4' }))
+    solid.appendChild(mk('path', { d: 'M36.4,7.6 L37.8,11.1 L41.3,12.5 L37.8,13.9 L36.4,17.4 L35,13.9 L31.5,12.5 L35,11.1 Z' }))
+    drawing.appendChild(solid)
+    svg.appendChild(drawing)
+    /* 收笔后落回原始标识图，保证最终形状和尺寸与原版一致。 */
+    var finalHref = base + 'cheese-black.png' + ver
+    var finalImg = document.createElementNS(ns, 'image')
+    finalImg.setAttribute('class', 'cheese-final')
+    finalImg.setAttribute('href', finalHref)
+    finalImg.setAttributeNS(xlink, 'xlink:href', finalHref)
+    finalImg.setAttribute('width', '50')
+    finalImg.setAttribute('height', '50')
+    finalImg.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+    svg.appendChild(finalImg)
     return svg
   }
 
@@ -780,11 +841,11 @@
 
   ;(function logoStage() {
     ui.logo.appendChild(svgBrand())
-    ui.logo.appendChild(el('div', 'dsu-logolabel', C.logoLabel || 'Q I S H I'))   /* QISHI PATCH 8：logo 下方那行也走配置 */
+    ui.logo.appendChild(el('div', 'dsu-logolabel', C.logoLabel || 'C H E E S E'))   /* QISHI PATCH 8：logo 下方那行也走配置 */
   })()
 
   ;(function welcomeLogo() {
-    ui.w3.appendChild(svgBrand())
+    ui.w3.appendChild(svgBrand('dsu-w3-mark'))
     ui.w3.appendChild(el('span', 'dsu-w3label', C.welcomeLabel || 'D E E P S E E K  ·  H A R N E S S')) /* QISHI PATCH 7：终幕小字改读配置 */
   })()
 
@@ -3848,8 +3909,11 @@
   function assembleLogo() {
     ui.logo.classList.add('dsu-in')
     ui.dots.hidden = false
+    /* 新标识是手写路径：加 cheese-write 触发「先写 C、再补小元素、最后填充」的动画。 */
+    var brandSvg = ui.logo.querySelector('svg')
+    if (brandSvg) brandSvg.classList.add('cheese-write')
     var path = ui.logo.querySelector('path')
-    if (path && typeof path.getTotalLength === 'function') {
+    if (path && !(brandSvg && brandSvg.classList.contains('cheese-write')) && typeof path.getTotalLength === 'function') {
       try {
         var len = path.getTotalLength()
         /* ══ QISHI PATCH 10 · 落墨渐入（0.3 秒）══════════════════════════════

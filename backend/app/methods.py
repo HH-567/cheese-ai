@@ -5,6 +5,9 @@ from datetime import date
 from decimal import Decimal
 
 
+CSV_MAX_BYTES = 500 * 1024
+
+
 METHODS = [
     {"id": "budget", "name": "预算余量", "fields": [
         {"id": "budget", "label": "总预算（元）", "placeholder": "1500"},
@@ -54,7 +57,7 @@ def run_method(method: str, fields: dict[str, str]) -> list[dict[str, str]]:
                 row("日期范围", f"{start.isoformat()} 至 {end.isoformat()}")]
 
     data, column_name = fields["csv"], fields["column"].strip()
-    if len(data.encode("utf-8")) > 512_000:
+    if len(data.encode("utf-8")) > CSV_MAX_BYTES:
         raise ValueError("CSV 文件不能超过 500 KB。")
     if not column_name:
         raise ValueError("请填写要汇总的列名。")

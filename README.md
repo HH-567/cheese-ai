@@ -1,5 +1,7 @@
 # 柒柿AI
 
+英文名：**Cheese AI**。登录页/开场动画的品牌标识使用这个英文名，中文仍为「柒柿AI」。
+
 按产品设计与技术方案实现的本地通用助手。React + TypeScript + Vite 提供聊天和管理界面，FastAPI + SQLite 提供登录、会话、问答库、匹配、治理与用量 API。
 
 `frontend/` 是实际使用的网页。`backend/app/` 先查本地工具和有权限的问答，未命中再请求云端模型。`demo/` 是独立的纯前端演示，使用模拟回答和浏览器存储。
@@ -35,7 +37,13 @@ npm run dev
 
 本机可在同一登录页使用预置账号或登记新身份。注册、跨设备会话、每日云端额度和 GitHub 正式发布查询的设置方式见 [注册与使用](docs/trial.md)。管理员可以在设置页的「成员额度」里给每个账号单独设每日上限（留空跟随默认值，0 表示不限）。
 
-聊天输入框的「网页搜索」默认使用百度。服务端配置 `BAIDU_API_KEY`（百度千帆 API Key）后，聊天可显示搜索摘要和可点击的原文引用。接口未配置或暂时不可用时，可以点击「在百度查看结果」。如果需要使用 Brave Search，可设 `QISHI_SEARCH_PROVIDER=brave` 和 `BRAVE_SEARCH_API_KEY`。摘要生成计入云端额度，搜索记录保存在会话历史。 [百度搜索 API](https://cloud.baidu.com/doc/qianfan-api/s/wmwbk70bv)
+勾选聊天输入框的「网页搜索」后，可以选择百度、维基百科或 DeepSeek 搜索。默认使用百度，可通过 `QISHI_SEARCH_PROVIDER` 设置默认值。搜索结果会标注引擎，并附上可点击的来源。摘要生成计入云端模型额度。
+
+- 百度使用 `BAIDU_API_KEY`（千帆 API Key）。站内搜索不可用时，可以打开百度结果页。 [百度搜索 API](https://cloud.baidu.com/doc/qianfan-api/s/wmwbk70bv)
+- 维基百科无需 API 密钥。问题包含中文时搜索中文站，其余搜索英文站。公开部署可通过 `WIKIPEDIA_USER_AGENT` 填写带有维护者联系方式的客户端标识。 [MediaWiki 搜索 API](https://www.mediawiki.org/wiki/API:Search)
+- DeepSeek 搜索使用 `DEEPSEEK_SEARCH_API_KEY`。云端模型已直连 `https://api.deepseek.com` 时，可复用该连接的 `CLOUD_API_KEY`。搜索问题最多 128 个字符，搜索接口费用由 DeepSeek 单独计收。 [DeepSeek 搜索文档](https://api-docs.deepseek.com/guides/search/)
+
+配置 `BRAVE_SEARCH_API_KEY` 后，选择器也会显示 Brave Search。
 
 聊天输入框的「上传文件」支持有文字层的 PDF、DOCX、TXT、Markdown 和 CSV。每个文件最多 5 MB，每次选择一份文件提问。点击回答中的引用编号可查看对应的页码、段落或行号及原文。文件文本保存在当前会话，提问时将相关片段交给云端模型，并计入云端额度。
 
@@ -84,6 +92,14 @@ python -m app.cli create-user --id owner --name 管理员 --password "替换为�
 
 ## 问答样例
 
+侧栏「Work 工作台」接受自然语言目标，可添加一份 500 KB 以内的 CSV。同类任务匹配本地规则后，用本次数据重新计算。规则未覆盖的任务交给云端代理，代理可以查看工具结果，再选择下一步或结束任务。目前提供日期间隔、预算余额和 CSV 数值列求和。
+
+可以载入两份「活动支出」示例，比较同一规则算出的余额。载入「条件预算」示例则可以看到云端代理先汇总 CSV，再判断是否需要计算预算余额。运行后可下载 Markdown 报告。云端调用计入现有额度，「用量」页可查看 Work 的完成数、零云端完成数和实际调用次数。
+
+成功执行的固定步骤可以保存为个人规则。点「保存为规则」核对步骤和依赖，勾选每次要重新填写的参数。下次从「我的规则」选择运行，填入新值或换一份 CSV，即可在本地重算。需要根据结果选择不同步骤的任务继续使用自由任务。
+
+运行 `python backend/tests/work_acceptance.py` 可在隔离数据库和本地模拟模型中验证 Work 的两条路径，无需 API 密钥。
+
 侧栏「复用方法」提供预算余量、日期间隔和 CSV 数值列汇总。更换参数或文件即可重新计算，运算均在本机完成。
 
 问「画一只骑自行车的鹈鹕」或 `draw a pelican on a bicycle`，回答是一整页能直接保存打开的 HTML，并附一句用法；中文提问给中文页，英文提问给英文页，全程不调用任何模型，云端额度也不会计数。三个样张在 `backend/data/pelican/`（完整、简单、简单2，中英各一份）：默认给「完整」，问句里写「简单」「简单2」可以换一版，也可以用 `QISHI_PELICAN_VARIANT` 改默认值。把回答里的代码另存为 `pelican.html`（UTF-8）双击即可，页面纯离线、不加载外部文件。
@@ -94,7 +110,11 @@ python -m app.cli create-user --id owner --name 管理员 --password "替换为�
 
 点击「换个说法」会优先使用当前版本已收录的表达，也可以按需让云端改写。按需改写保存在该条聊天回答中，可恢复原回答。未入库的云端回答也可以提交反馈，反馈和答复快照可在审核页查看。
 
+审核页的反馈可以点「已解决」：选「已修正答案」会发布为新版本，选「不修正」则填写原因；两种处理都会把结果作为一条通知发进反馈者的会话，反馈者下次打开聊天就能看到。
+
 设置里的「自动生成等价问法」控制入库后要不要再调一次模型补问法：关掉后问答照样入库，但不再排学习任务，可以省云端调用。批量导入的问答组可以用 `backend/tools/generate_aliases.py --prefix ... --workers 12` 并行补问法。
+
+问答库的条目详情里，管理员、审核和问答组所有者可以直接增删等价问法（手动添加的标记为「手动添加」，原问不能删除）；普通成员在共享问答组里看到的是「提交建议」，建议进入审核页的「问法建议」，由管理员或审核采纳/不采纳，处理结果会通知建议者。
 
 ## 导入外部问答库
 
@@ -104,7 +124,9 @@ python -m app.cli create-user --id owner --name 管理员 --password "替换为�
 python backend/tools/import_qa_library.py --source "C:\path\qa_library.json" --scope shared
 ```
 
-写入前会把数据库备份到 `data/backups/before-qa-import-<时间>/`。`--dry-run` 只打印统计，`--replace` 先删除此前导入的条目再重导。问答库条目很多时，`/api/groups` 支持 `limit` 与 `offset`，网页默认每页 200 条并可「加载更多」。
+写入前会把数据库备份到 `data/backups/before-qa-import-<时间>/`。`--dry-run` 只打印统计，`--replace` 先删除此前导入的条目再重导。`GET /api/groups` 接收 `page` 和 `page_size`，返回当前页 `items` 和筛选后的总条数 `total`。网页默认每页 25 条，可切换每页数量。
+
+聊天中的模型回复可点「重新回答」，新答复和原答复都保存在会话中。个人问答库支持跨页勾选并提交共享审核。管理员在「审核与治理 → 共享待审核」核对提交时的答案，批准后会在共享库新建条目。
 
 ## 导入校园资料
 
