@@ -212,7 +212,19 @@ python backend/tests/work_acceptance.py
 4. `python -m uvicorn app.main:app --app-dir backend --env-file .env --host 127.0.0.1 --port 8000`；
 5. 演示库：解压 `cheese-ai-library-20261122.json.gz`，运行 `import_qa_library.py --source ... --scope shared`；或用提交包里自带的 `data/qishi.sqlite3` 直接启动。
 
-## 17. 相关文档
+## 17. 开源与致谢
+
+开场动画（`frontend/public/login-intro/`）不是从零实现的，而是基于开源项目 **dsh-boot-suite** 的浏览器端运行时修改而来：
+
+- **上游**：<https://github.com/LeeRolling/dsh-boot-suite>（MIT，作者 LeeRolling）；
+- **使用范围**：`lib/splash.js`、`lib/splash.css`、`lib/assets/**` —— 开场六幕时间轴、音效/语音与 SVG 标识组装；
+- **本地修改**：品牌替换（CHEESE AI / 柒柿 AI）、图标路径、登录闸门（`QISHI PATCH 1–10`），并把「身份确认」一幕换成真实登录表单；逐项说明见 `frontend/public/login-intro/README-PATCHES.md`；
+- **许可证**：上游 MIT 许可证保留在 `frontend/public/login-intro/LICENSE`（Copyright © 2026 沈宏宏）；
+- 上游 README 注明视觉参考：沈宏宏 / NativeDog1 / @yannicksong0106。
+
+除开场动画外，前后端业务代码为本项目实现。
+
+## 18. 相关文档
 
 - [README](README.md)、[Pitch Deck](pitch/柒柿AI-PitchDeck-20261122.pptx)
 - [演示问答库快照](docs/demo-library.md)
