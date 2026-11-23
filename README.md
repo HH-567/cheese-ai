@@ -144,3 +144,11 @@ python backend/tests/cloud_flow.py           # 本地模拟云端，无需 Key
 ## 说明
 
 项目用于学习与黑客松演示。第三方数据与模型输出的权利归各自所有者，商用前请自行确认授权与使用条款。
+
+## 许可证
+
+本项目代码采用 **MIT** 许可证，见 [LICENSE](LICENSE)。
+
+- 开场动画目录 `frontend/public/login-intro/` 来自开源项目 dsh-boot-suite，保留其 MIT 版权声明（见该目录下的 `LICENSE`）；
+- `backend/data/`、`data/` 及演示库快照中的第三方校园资料与问答内容，权利归原作者/学校所有，不在 MIT 授权范围内；对外分发或商用前请自行确认授权；
+- 模型输出、第三方模型与素材的权利归各自所有者。
