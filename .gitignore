@@ -11,3 +11,8 @@ frontend/dist/
 .env
 
 demo-site/
+
+pitch/promo/build/
+pitch/promo/clips/
+pitch/promo/vo/
+pitch/promo/assets/
