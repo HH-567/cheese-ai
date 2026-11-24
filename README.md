@@ -33,6 +33,8 @@
 
 ![模型接口](docs/screenshots/05-providers.webp)
 
+宣传片：[完整版 1:45](pitch/promo/柒柿AI-宣传片.mp4) · [55 秒版](pitch/promo/柒柿AI-宣传片-55s.mp4)（画鹈鹕与效果在 0:30–0:47）
+
 ## 它是怎么工作的
 
 ```mermaid

@@ -1,0 +1,7 @@
+file 'C:/Users/Public/给ai/dsh/柒柿AI/pitch/promo/build/01-title.mp4'
+file 'C:/Users/Public/给ai/dsh/柒柿AI/pitch/promo/build/03-chat.mp4'
+file 'C:/Users/Public/给ai/dsh/柒柿AI/pitch/promo/build/04-alias.mp4'
+file 'C:/Users/Public/给ai/dsh/柒柿AI/pitch/promo/build/05-pelican.mp4'
+file 'C:/Users/Public/给ai/dsh/柒柿AI/pitch/promo/build/06-render.mp4'
+file 'C:/Users/Public/给ai/dsh/柒柿AI/pitch/promo/build/09-governance.mp4'
+file 'C:/Users/Public/给ai/dsh/柒柿AI/pitch/promo/build/14-closing.mp4'
